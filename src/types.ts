@@ -1,0 +1,27 @@
+export type Question = {
+  id: string;
+  text: string;
+  options: string[];
+  correctAnswer: string;
+  timeLimit: number;
+};
+
+export type Player = {
+  id: string;
+  name: string;
+  score: number;
+  hasAnswered: boolean;
+  currentAnswer: string | null;
+  connection: any; // DataConnection
+};
+
+export type GameState = 'LOBBY' | 'STARTING' | 'QUESTION' | 'LEADERBOARD' | 'FINISHED';
+
+export type MessageType = 
+  | { type: 'JOIN'; name: string }
+  | { type: 'JOIN_SUCCESS'; playerId: string; gameState: GameState }
+  | { type: 'JOIN_ERROR'; message: string }
+  | { type: 'STATE_UPDATE'; state: GameState; data?: any }
+  | { type: 'SUBMIT_ANSWER'; answer: string }
+  | { type: 'ANSWER_RESULT'; correct: boolean; score: number; correctAnswer: string }
+  | { type: 'PLAYER_LIST'; players: { id: string; name: string; score: number }[] };

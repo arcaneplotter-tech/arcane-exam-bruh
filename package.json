@@ -13,10 +13,13 @@
   "dependencies": {
     "@google/genai": "^1.44.0",
     "@tailwindcss/vite": "^4.2.1",
+    "@types/papaparse": "^5.5.2",
     "@vitejs/plugin-react": "^5.1.4",
     "clsx": "^2.1.1",
     "lucide-react": "^0.577.0",
     "motion": "^12.35.2",
+    "papaparse": "^5.5.3",
+    "peerjs": "^1.5.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tailwind-merge": "^3.5.0",
