@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import {
   Clock, Upload, CheckCircle, Flag, ChevronLeft, ChevronRight,
   LayoutGrid, Eye, Play, LogOut, Check, Timer, HelpCircle, Trophy,
-  Users, Copy, User, Shuffle, Zap, XCircle, BarChart3, Download
+  Users, Copy, User, Shuffle, Zap, XCircle, BarChart3, Download, Sparkles
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -113,7 +113,7 @@ const formatTime = (seconds: number) => {
 // --- Main App ---
 export default function App() {
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [appState, setAppState] = useState<'welcome' | 'lobby' | 'playing' | 'leaderboard'>('welcome');
+  const [appState, setAppState] = useState<'welcome' | 'lobby' | 'countdown' | 'playing' | 'leaderboard' | 'review'>('welcome');
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [room, setRoom] = useState<any>(null);
@@ -124,9 +124,43 @@ export default function App() {
   const [userAnswers, setUserAnswers] = useState<Record<number, string>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<number>>(new Set());
   const [timeRemaining, setTimeRemaining] = useState(0);
+  const [countdown, setCountdown] = useState(5);
   const [hasFinished, setHasFinished] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
   const [isPasteModalOpen, setPasteModalOpen] = useState(false);
+
+  const copyAITemplate = () => {
+    const template = `Generate exactly in strict CSV format using the following schema:
+
+ID;Question;Options(separated by |);Answer;Image;Explanation;Category;Difficulty
+
+STRICT OUTPUT RULES (MANDATORY):
+1. Output ONLY raw CSV rows.
+2. Do NOT include code blocks, markdown, comments, headings, or explanations outside the CSV.
+3. Do NOT include a header row.
+4. Each row must contain exactly 8 columns separated by semicolons (;).
+5. Never leave required columns missing. Use empty field only for Image if none applies.
+
+COLUMN DEFINITIONS:
+• ID: Unique numeric or alphanumeric identifier (no spaces). Example: Q001
+• Question: Clear, precise, exam-level question. No ambiguity.
+• Options(separated by |): For MCQ: provide exactly 4 options. Format: A) Option text|B) Option text|C) Option text|D) Option text. For essay questions: write exactly: ESSAY
+• Answer: For MCQ: write the FULL correct option text including its letter. Example: B) Mitochondria. For essay: write a concise model answer.
+• Image: Leave empty unless an image URL is necessary.
+• Explanation: Clear, educational explanation of WHY the answer is correct.
+• Category: Specific subject category related to the topic.
+• Difficulty: Must be exactly one of: Easy, Medium, Hard
+
+FORMAT EXAMPLE (FOLLOW EXACT STRUCTURE):
+Q001;What is the functional unit of the kidney?;A) Nephron|B) Neuron|C) Alveolus|D) Glomerulus;A) Nephron;;The nephron is the microscopic structural and functional unit of the kidney responsible for filtration and urine formation.;Physiology;Easy
+Q002;Explain how oxygen is transported in blood.;ESSAY;Oxygen is transported primarily bound to hemoglobin in red blood cells, with a small portion dissolved in plasma.;;Hemoglobin enables efficient oxygen transport and release based on pressure gradients.;Physiology;Medium
+
+Generate 10 questions about [INSERT TOPIC HERE]:`;
+    
+    navigator.clipboard.writeText(template)
+      .then(() => alert("AI prompt copied to clipboard! Paste it into ChatGPT."))
+      .catch(() => alert("Failed to copy to clipboard."));
+  };
 
   useEffect(() => {
     // Connect to the same host/port
@@ -147,7 +181,8 @@ export default function App() {
 
     newSocket.on("examStarted", (updatedRoom) => {
       setRoom(updatedRoom);
-      setAppState('playing');
+      setAppState('countdown');
+      setCountdown(5);
       setTimeRemaining(updatedRoom.settings.durationMinutes * 60);
       setHasFinished(false);
       setUserAnswers({});
@@ -168,7 +203,17 @@ export default function App() {
 
   useEffect(() => {
     let interval: any;
-    if (appState === 'playing' && timeRemaining > 0 && !hasFinished) {
+    if (appState === 'countdown') {
+      interval = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            setAppState('playing');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else if (appState === 'playing' && timeRemaining > 0 && !hasFinished) {
       interval = setInterval(() => {
         setTimeRemaining(prev => {
           if (prev <= 1) {
@@ -244,6 +289,11 @@ export default function App() {
   const handleRestartExam = () => {
     if (!isHost || !room) return;
     socket?.emit("restartExam", { roomId: room.id });
+  };
+
+  const handleReviewExam = () => {
+    setAppState('review');
+    setCurrentQuestionIndex(0);
   };
 
   // --- Renderers ---
@@ -390,6 +440,9 @@ export default function App() {
               />
               <div className="flex gap-3 mt-4">
                 <Button variant="outline" onClick={() => setPasteContent(SAMPLE_CSV)} className="flex-1">Load Sample</Button>
+                <Button variant="ai" onClick={copyAITemplate} className="flex-1">
+                  <Sparkles size={16} className="mr-2" /> Copy AI Prompt
+                </Button>
                 <Button 
                   className="flex-1"
                   onClick={() => {
@@ -409,6 +462,18 @@ export default function App() {
             </div>
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (appState === 'countdown') {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4">
+        <div className="text-center space-y-8 animate-pulse">
+          <h2 className="text-3xl font-bold text-slate-400">Exam starting in...</h2>
+          <div className="text-9xl font-black text-indigo-500">{countdown}</div>
+          <p className="text-slate-500">Get ready!</p>
+        </div>
       </div>
     );
   }
@@ -515,6 +580,122 @@ export default function App() {
     );
   }
 
+  if (appState === 'review') {
+    const currentQuestion = room?.examData[currentQuestionIndex];
+    if (!currentQuestion) return <div>Loading...</div>;
+
+    const userAnswer = userAnswers[currentQuestionIndex];
+    const isCorrect = essayEvaluator.isCorrect(userAnswer, currentQuestion.correctAnswer, currentQuestion.isEssay);
+
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
+        <header className="sticky top-0 z-40 w-full bg-slate-800/80 backdrop-blur-md border-b border-slate-700 shadow-sm">
+          <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="font-bold text-lg">Arcane<span className="text-indigo-400">EXAMS</span> <span className="text-slate-500 text-sm ml-2">Review Mode</span></div>
+            <Button variant="outline" size="sm" onClick={() => setAppState('leaderboard')}>
+              Back to Leaderboard
+            </Button>
+          </div>
+        </header>
+
+        <main className="flex-1 w-full max-w-3xl mx-auto p-4 md:p-6 flex flex-col">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-black text-indigo-400">{String(currentQuestionIndex + 1).padStart(2, '0')}</span>
+              <span className="text-slate-500 font-medium text-lg">/ {room.examData.length}</span>
+            </div>
+            <div className={cn(
+              "px-4 py-1.5 rounded-full font-bold text-sm flex items-center gap-2",
+              isCorrect ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-red-500/20 text-red-400 border border-red-500/30"
+            )}>
+              {isCorrect ? <><CheckCircle size={16} /> Correct</> : <><XCircle size={16} /> Incorrect</>}
+            </div>
+          </div>
+
+          <div className="bg-slate-800/50 backdrop-blur-xl p-6 md:p-8 rounded-3xl border border-slate-700 shadow-xl mb-6">
+            <h3 className="text-lg md:text-xl font-semibold leading-relaxed">{currentQuestion.text}</h3>
+          </div>
+
+          <div className="flex flex-col gap-3 flex-1">
+            {currentQuestion.isEssay ? (
+              <div className="space-y-4">
+                <div className="p-6 rounded-2xl bg-slate-800/50 border border-slate-700">
+                  <h4 className="text-sm font-bold text-slate-400 mb-2">Your Answer:</h4>
+                  <p className={cn("text-lg", !userAnswer && "text-slate-500 italic")}>{userAnswer || "No answer provided"}</p>
+                </div>
+                <div className="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
+                  <h4 className="text-sm font-bold text-emerald-400 mb-2">Expected Answer:</h4>
+                  <p className="text-lg text-slate-200">{currentQuestion.correctAnswer}</p>
+                </div>
+              </div>
+            ) : (
+              currentQuestion.options.map((option: string, idx: number) => {
+                const isSelected = userAnswer === option;
+                const isOptionCorrect = essayEvaluator.isCorrect(option, currentQuestion.correctAnswer, false);
+                
+                let optionStyle = "border-slate-700 bg-slate-800/50 opacity-50";
+                let iconStyle = "border-slate-600";
+                let Icon = null;
+
+                if (isOptionCorrect) {
+                  optionStyle = "border-emerald-500 bg-emerald-500/20 text-emerald-100 shadow-lg shadow-emerald-500/10";
+                  iconStyle = "border-emerald-500 bg-emerald-500 text-white";
+                  Icon = Check;
+                } else if (isSelected && !isOptionCorrect) {
+                  optionStyle = "border-red-500 bg-red-500/20 text-red-100";
+                  iconStyle = "border-red-500 bg-red-500 text-white";
+                  Icon = XCircle;
+                }
+
+                return (
+                  <div
+                    key={idx}
+                    className={cn(
+                      "flex items-center gap-4 p-4 md:p-5 rounded-xl border-2 text-left transition-all duration-200",
+                      optionStyle
+                    )}
+                  >
+                    <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0", iconStyle)}>
+                      {Icon && <Icon size={14} strokeWidth={3} />}
+                    </div>
+                    <span className="text-base md:text-lg font-medium">{option}</span>
+                  </div>
+                );
+              })
+            )}
+
+            {currentQuestion.explanation && (
+              <div className="mt-4 p-6 rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
+                <h4 className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-2">
+                  <HelpCircle size={16} /> Explanation
+                </h4>
+                <p className="text-slate-300 leading-relaxed">{currentQuestion.explanation}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-800">
+            <Button 
+              variant="outline" 
+              onClick={() => setCurrentQuestionIndex(p => p - 1)} 
+              disabled={currentQuestionIndex === 0}
+            >
+              <ChevronLeft className="mr-2" size={20} /> Previous
+            </Button>
+            
+            <Button 
+              variant="primary" 
+              onClick={() => setCurrentQuestionIndex(p => p + 1)}
+              disabled={currentQuestionIndex === room.examData.length - 1}
+            >
+              Next <ChevronRight className="ml-2" size={20} />
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (appState === 'leaderboard' || hasFinished) {
     // Sort players by score descending, then time taken ascending
     const sortedPlayers = [...(room?.players || [])].sort((a: any, b: any) => {
@@ -563,13 +744,16 @@ export default function App() {
             </div>
           </div>
 
-          {isHost && (
-            <div className="flex justify-center gap-4 pt-4">
+          <div className="flex justify-center gap-4 pt-4">
+            <Button size="lg" variant="outline" onClick={handleReviewExam}>
+              <Eye size={20} className="mr-2" /> Review Answers
+            </Button>
+            {isHost && (
               <Button size="lg" onClick={handleRestartExam}>
                 <Shuffle size={20} className="mr-2" /> Play Again
               </Button>
-            </div>
-          )}
+            )}
+          </div>
           {!isHost && (
             <div className="text-center text-slate-400 pt-4">
               Waiting for host to restart or close the room...
