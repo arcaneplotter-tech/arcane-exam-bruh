@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { io, Socket } from 'socket.io-client';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Clock, Upload, CheckCircle, Flag, ChevronLeft, ChevronRight,
@@ -113,14 +112,12 @@ const formatTime = (seconds: number) => {
 
 // --- Main App ---
 export default function App() {
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [appState, setAppState] = useState<'welcome' | 'lobby' | 'countdown' | 'playing' | 'leaderboard' | 'review'>('welcome');
+  const [appState, setAppState] = useState<'welcome' | 'setup' | 'countdown' | 'playing' | 'results' | 'review'>('welcome');
   const [playerName, setPlayerName] = useState('');
-  const [roomCode, setRoomCode] = useState('');
-  const [room, setRoom] = useState<any>(null);
-  const [isHost, setIsHost] = useState(false);
   
   // Exam State
+  const [examData, setExamData] = useState<any[]>([]);
+  const [settings, setSettings] = useState({ durationMinutes: 30 });
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState<Record<number, string>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<number>>(new Set());
@@ -129,6 +126,10 @@ export default function App() {
   const [hasFinished, setHasFinished] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
   const [isPasteModalOpen, setPasteModalOpen] = useState(false);
+  
+  // Results
+  const [score, setScore] = useState<number | null>(null);
+  const [timeTaken, setTimeTaken] = useState<number | null>(null);
 
   const copyAITemplate = () => {
     const template = `Generate exactly in strict CSV format using the following schema:
@@ -164,45 +165,6 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
   };
 
   useEffect(() => {
-    // Connect to the same host/port
-    const newSocket = io();
-    setSocket(newSocket);
-
-    newSocket.on("roomUpdated", (updatedRoom) => {
-      setRoom(updatedRoom);
-      if (updatedRoom.status === 'leaderboard') {
-        setAppState('leaderboard');
-      } else if (updatedRoom.status === 'lobby') {
-        setAppState('lobby');
-        setHasFinished(false);
-        setUserAnswers({});
-        setCurrentQuestionIndex(0);
-      }
-    });
-
-    newSocket.on("examStarted", (updatedRoom) => {
-      setRoom(updatedRoom);
-      setAppState('countdown');
-      setCountdown(5);
-      setTimeRemaining(updatedRoom.settings.durationMinutes * 60);
-      setHasFinished(false);
-      setUserAnswers({});
-      setCurrentQuestionIndex(0);
-    });
-
-    newSocket.on("roomClosed", (data) => {
-      alert(data.message);
-      setAppState('welcome');
-      setRoom(null);
-      setIsHost(false);
-    });
-
-    return () => {
-      newSocket.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
     let interval: any;
     if (appState === 'countdown') {
       interval = setInterval(() => {
@@ -228,68 +190,55 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
     return () => clearInterval(interval);
   }, [appState, timeRemaining, hasFinished]);
 
-  const handleCreateRoom = () => {
+  const handleStartSetup = () => {
     if (!playerName.trim()) return alert("Please enter your name");
-    socket?.emit("createRoom", { name: playerName }, (response: any) => {
-      if (response.success) {
-        setIsHost(true);
-        setRoom(response.room);
-        setAppState('lobby');
-      }
-    });
-  };
-
-  const handleJoinRoom = () => {
-    if (!playerName.trim()) return alert("Please enter your name");
-    if (!roomCode.trim()) return alert("Please enter a room code");
-    socket?.emit("joinRoom", { roomId: roomCode.toUpperCase(), name: playerName }, (response: any) => {
-      if (response.success) {
-        setIsHost(false);
-        setRoom(response.room);
-        setAppState('lobby');
-      } else {
-        alert(response.message);
-      }
-    });
+    setAppState('setup');
   };
 
   const handleLoadQuestions = (questions: any[]) => {
-    if (!isHost || !room) return;
-    socket?.emit("updateExamData", {
-      roomId: room.id,
-      examData: questions,
-      settings: room.settings
-    });
+    setExamData(questions);
     setPasteModalOpen(false);
   };
 
   const handleStartExam = () => {
-    if (!isHost || !room) return;
-    if (room.examData.length === 0) return alert("Please load questions first");
-    socket?.emit("startExam", { roomId: room.id });
+    if (examData.length === 0) return alert("Please load questions first");
+    setAppState('countdown');
+    setCountdown(5);
+    setTimeRemaining(settings.durationMinutes * 60);
+    setHasFinished(false);
+    setUserAnswers({});
+    setCurrentQuestionIndex(0);
+    setScore(null);
+    setTimeTaken(null);
   };
 
   const submitExam = () => {
-    if (hasFinished || !room) return;
+    if (hasFinished) return;
     setHasFinished(true);
     
     let correct = 0;
-    room.examData.forEach((q: any, idx: number) => {
+    examData.forEach((q: any, idx: number) => {
       const userAns = userAnswers[idx];
       if (userAns && essayEvaluator.isCorrect(userAns, q.correctAnswer, q.isEssay)) {
         correct++;
       }
     });
 
-    const score = Math.round((correct / Math.max(room.examData.length, 1)) * 100);
-    const timeTaken = (room.settings.durationMinutes * 60) - timeRemaining;
+    const finalScore = Math.round((correct / Math.max(examData.length, 1)) * 100);
+    const finalTimeTaken = (settings.durationMinutes * 60) - timeRemaining;
 
-    socket?.emit("submitExam", { roomId: room.id, score, timeTaken });
+    setScore(finalScore);
+    setTimeTaken(finalTimeTaken);
+    setAppState('results');
   };
 
   const handleRestartExam = () => {
-    if (!isHost || !room) return;
-    socket?.emit("restartExam", { roomId: room.id });
+    setAppState('setup');
+    setHasFinished(false);
+    setUserAnswers({});
+    setCurrentQuestionIndex(0);
+    setScore(null);
+    setTimeTaken(null);
   };
 
   const handleReviewExam = () => {
@@ -314,7 +263,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             className="text-center"
           >
             <h1 className="text-4xl font-black tracking-tight mb-2">Arcane<span className="text-indigo-400">EXAMS</span></h1>
-            <p className="text-slate-400">Multiplayer Exam Platform</p>
+            <p className="text-slate-400">Personal Exam Platform</p>
           </motion.div>
           
           <div className="space-y-4">
@@ -330,25 +279,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             </div>
             
             <div className="pt-4 space-y-3">
-              <Button className="w-full" onClick={handleCreateRoom}>Create New Room (Host)</Button>
-              
-              <div className="relative flex items-center py-2">
-                <div className="flex-grow border-t border-slate-700"></div>
-                <span className="flex-shrink-0 mx-4 text-slate-500 text-sm">OR</span>
-                <div className="flex-grow border-t border-slate-700"></div>
-              </div>
-              
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  value={roomCode} 
-                  onChange={e => setRoomCode(e.target.value.toUpperCase())}
-                  className="flex-1 p-3 bg-slate-900/50 rounded-xl border border-slate-700 focus:border-indigo-500 outline-none uppercase transition-colors"
-                  placeholder="ROOM CODE"
-                  maxLength={6}
-                />
-                <Button variant="secondary" onClick={handleJoinRoom}>Join</Button>
-              </div>
+              <Button className="w-full" onClick={handleStartSetup}>Continue</Button>
             </div>
           </div>
         </div>
@@ -356,7 +287,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
     );
   }
 
-  if (appState === 'lobby') {
+  if (appState === 'setup') {
     return (
       <motion.div 
         initial={{ opacity: 0 }}
@@ -371,20 +302,12 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             className="bg-slate-800/50 backdrop-blur-xl p-6 rounded-3xl border border-slate-700 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4"
           >
             <div>
-              <h2 className="text-2xl font-bold">Room Lobby</h2>
-              <p className="text-slate-400">Room Code: <span className="font-mono text-indigo-400 font-bold text-xl tracking-widest">{room?.id}</span></p>
+              <h2 className="text-2xl font-bold">Exam Setup</h2>
+              <p className="text-slate-400">Welcome, <span className="font-bold text-indigo-400">{playerName}</span></p>
             </div>
-            {isHost && (
-              <Button size="lg" onClick={handleStartExam} disabled={!room?.examData?.length}>
-                Start Exam
-              </Button>
-            )}
-            {!isHost && (
-              <div className="px-4 py-2 bg-indigo-500/20 text-indigo-300 rounded-xl border border-indigo-500/30 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></div>
-                Waiting for host to start...
-              </div>
-            )}
+            <Button size="lg" onClick={handleStartExam} disabled={!examData?.length}>
+              Start Exam
+            </Button>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -394,75 +317,32 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
               transition={{ delay: 0.1 }}
               className="bg-slate-800/50 backdrop-blur-xl p-6 rounded-3xl border border-slate-700 shadow-xl space-y-4"
             >
-              <h3 className="text-lg font-bold flex items-center gap-2"><Users size={20}/> Players ({room?.players.length})</h3>
-              <div className="space-y-2">
-                <AnimatePresence>
-                  {room?.players.map((p: any) => (
-                    <motion.div 
-                      key={p.id} 
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-700"
-                    >
-                      <span className="font-medium">{p.name} {p.id === socket?.id ? '(You)' : ''}</span>
-                      {p.id === room.hostId && <span className="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded-full font-bold">HOST</span>}
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ x: 20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="bg-slate-800/50 backdrop-blur-xl p-6 rounded-3xl border border-slate-700 shadow-xl space-y-4"
-            >
               <h3 className="text-lg font-bold flex items-center gap-2"><LayoutGrid size={20}/> Exam Settings</h3>
               
-              {isHost ? (
-                <div className="space-y-4">
-                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-bold text-slate-400">Questions Loaded</span>
-                      <span className="font-bold text-indigo-400">{room?.examData?.length || 0}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => setPasteModalOpen(true)}>
-                        <Upload size={16} className="mr-2"/> Load CSV
-                      </Button>
-                      <Button variant="ai" size="icon" onClick={copyAITemplate} title="Copy AI Prompt">
-                        <Sparkles size={16} />
-                      </Button>
-                    </div>
+              <div className="space-y-4">
+                <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-bold text-slate-400">Questions Loaded</span>
+                    <span className="font-bold text-indigo-400">{examData?.length || 0}</span>
                   </div>
-                  
-                  <div>
-                    <label className="text-sm font-bold text-slate-400 block mb-1">Duration (Minutes)</label>
-                    <input 
-                      type="number" 
-                      value={room?.settings.durationMinutes} 
-                      onChange={e => {
-                        const val = parseInt(e.target.value) || 30;
-                        socket?.emit("updateExamData", { roomId: room.id, examData: room.examData, settings: { ...room.settings, durationMinutes: val } });
-                      }}
-                      className="w-full p-2 bg-slate-900/50 rounded-xl border border-slate-700 outline-none"
-                    />
-                  </div>
+                  <Button variant="outline" size="sm" className="w-full" onClick={() => setPasteModalOpen(true)}>
+                    <Upload size={16} className="mr-2"/> Load CSV Questions
+                  </Button>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-700">
-                    <span className="text-slate-400">Questions</span>
-                    <span className="font-bold">{room?.examData?.length || 0}</span>
-                  </div>
-                  <div className="flex justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-700">
-                    <span className="text-slate-400">Duration</span>
-                    <span className="font-bold">{room?.settings.durationMinutes} mins</span>
-                  </div>
+                
+                <div>
+                  <label className="text-sm font-bold text-slate-400 block mb-1">Duration (Minutes)</label>
+                  <input 
+                    type="number" 
+                    value={settings.durationMinutes} 
+                    onChange={e => {
+                      const val = parseInt(e.target.value) || 30;
+                      setSettings({ ...settings, durationMinutes: val });
+                    }}
+                    className="w-full p-2 bg-slate-900/50 rounded-xl border border-slate-700 outline-none"
+                  />
                 </div>
-              )}
+              </div>
             </motion.div>
           </div>
         </div>
@@ -490,7 +370,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
                   value={pasteContent}
                   onChange={(e) => setPasteContent(e.target.value)}
                   placeholder="Paste your CSV content here..."
-                  className="w-full flex-1 p-4 bg-slate-900 rounded-xl border border-slate-700 font-mono text-sm resize-none outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full flex-1 p-4 bg-slate-900 rounded-xl border border-slate-700 font-mono text-sm resize-none outline-none focus:border-indigo-500 transition-colors min-h-[300px]"
                 />
                 <div className="flex gap-3 mt-4">
                   <Button variant="outline" onClick={() => setPasteContent(SAMPLE_CSV)} className="flex-1">Load Sample</Button>
@@ -547,7 +427,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
   }
 
   if (appState === 'playing' && !hasFinished) {
-    const currentQuestion = room?.examData[currentQuestionIndex];
+    const currentQuestion = examData[currentQuestionIndex];
     if (!currentQuestion) return <div>Loading...</div>;
 
     return (
@@ -577,7 +457,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-black text-indigo-400">{String(currentQuestionIndex + 1).padStart(2, '0')}</span>
-              <span className="text-slate-500 font-medium text-lg">/ {room.examData.length}</span>
+              <span className="text-slate-500 font-medium text-lg">/ {examData.length}</span>
             </div>
             <Button 
               variant={flaggedQuestions.has(currentQuestionIndex) ? 'secondary' : 'ghost'} 
@@ -649,7 +529,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
               <ChevronLeft className="mr-2" size={20} /> Previous
             </Button>
             
-            {currentQuestionIndex === room.examData.length - 1 ? (
+            {currentQuestionIndex === examData.length - 1 ? (
               <Button variant="primary" onClick={submitExam}>
                 Submit Exam
               </Button>
@@ -665,7 +545,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
   }
 
   if (appState === 'review') {
-    const currentQuestion = room?.examData[currentQuestionIndex];
+    const currentQuestion = examData[currentQuestionIndex];
     if (!currentQuestion) return <div>Loading...</div>;
 
     const userAnswer = userAnswers[currentQuestionIndex];
@@ -681,8 +561,8 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
         <header className="sticky top-0 z-40 w-full bg-slate-800/80 backdrop-blur-md border-b border-slate-700 shadow-sm">
           <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
             <div className="font-bold text-lg">Arcane<span className="text-indigo-400">EXAMS</span> <span className="text-slate-500 text-sm ml-2">Review Mode</span></div>
-            <Button variant="outline" size="sm" onClick={() => setAppState('leaderboard')}>
-              Back to Leaderboard
+            <Button variant="outline" size="sm" onClick={() => setAppState('results')}>
+              Back to Results
             </Button>
           </div>
         </header>
@@ -691,7 +571,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-black text-indigo-400">{String(currentQuestionIndex + 1).padStart(2, '0')}</span>
-              <span className="text-slate-500 font-medium text-lg">/ {room.examData.length}</span>
+              <span className="text-slate-500 font-medium text-lg">/ {examData.length}</span>
             </div>
             <div className={cn(
               "px-4 py-1.5 rounded-full font-bold text-sm flex items-center gap-2",
@@ -792,7 +672,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             <Button 
               variant="primary" 
               onClick={() => setCurrentQuestionIndex(p => p + 1)}
-              disabled={currentQuestionIndex === room.examData.length - 1}
+              disabled={currentQuestionIndex === examData.length - 1}
             >
               Next <ChevronRight className="ml-2" size={20} />
             </Button>
@@ -802,41 +682,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
     );
   }
 
-  if (appState === 'leaderboard' || hasFinished) {
-    // Sort players by score descending, then time taken ascending
-    const sortedPlayers = [...(room?.players || [])].sort((a: any, b: any) => {
-      const aScore = a.score !== null ? a.score : -1;
-      const bScore = b.score !== null ? b.score : -1;
-      
-      if (bScore !== aScore) return bScore - aScore;
-      
-      const aTime = a.timeTaken !== null ? a.timeTaken : Infinity;
-      const bTime = b.timeTaken !== null ? b.timeTaken : Infinity;
-      
-      return aTime - bTime;
-    });
-
-    const allFinished = room?.players?.length > 0 && room.players.every((p: any) => p.finished);
-    let subtitle = "Waiting for other players to finish...";
-    
-    if (allFinished) {
-      if (sortedPlayers.length === 1) {
-        subtitle = `🏆 ${sortedPlayers[0].name} wins!`;
-      } else if (sortedPlayers.length > 1) {
-        const first = sortedPlayers[0];
-        const second = sortedPlayers[1];
-        if (first.score > second.score || (first.score === second.score && first.timeTaken < second.timeTaken)) {
-          subtitle = `🏆 ${first.name} wins!`;
-        } else if (first.score === second.score && first.timeTaken === second.timeTaken) {
-          subtitle = "🤝 It's a tie!";
-        } else {
-          subtitle = "Exam completed by all players";
-        }
-      } else {
-        subtitle = "Exam completed by all players";
-      }
-    }
-
+  if (appState === 'results' || hasFinished) {
     return (
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
@@ -856,53 +702,32 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             >
               <Trophy size={64} className="mx-auto text-yellow-500 mb-4" />
             </motion.div>
-            <h1 className="text-4xl font-black tracking-tight">Leaderboard</h1>
-            <p className="text-slate-400 text-lg">{subtitle}</p>
+            <h1 className="text-4xl font-black tracking-tight">Exam Results</h1>
+            <p className="text-slate-400 text-lg">Great job, {playerName}!</p>
           </motion.div>
 
           <motion.div 
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="bg-slate-800/50 backdrop-blur-xl rounded-3xl border border-slate-700 shadow-2xl overflow-hidden"
+            className="bg-slate-800/50 backdrop-blur-xl rounded-3xl border border-slate-700 shadow-2xl overflow-hidden p-8 flex flex-col items-center gap-6"
           >
-            <div className="grid grid-cols-12 gap-4 p-4 bg-slate-800 border-b border-slate-700 font-bold text-slate-400 text-sm uppercase tracking-wider">
-              <div className="col-span-2 text-center">Rank</div>
-              <div className="col-span-5">Player</div>
-              <div className="col-span-3 text-center">Score</div>
-              <div className="col-span-2 text-center">Time</div>
+            <div className="text-center">
+              <span className="text-slate-400 font-bold uppercase tracking-wider text-sm">Your Score</span>
+              <div className="text-6xl font-black text-emerald-400 mt-2">{score}%</div>
             </div>
             
-            <div className="divide-y divide-slate-700/50">
-              <AnimatePresence>
-                {sortedPlayers.map((p: any, idx: number) => (
-                  <motion.div 
-                    initial={{ x: -20, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    transition={{ delay: 0.4 + (idx * 0.1) }}
-                    key={p.id} 
-                    className={cn("grid grid-cols-12 gap-4 p-4 items-center transition-colors hover:bg-slate-800/30", p.id === socket?.id && "bg-indigo-500/10")}
-                  >
-                  <div className="col-span-2 flex justify-center">
-                    {idx === 0 ? <span className="w-8 h-8 rounded-full bg-yellow-500/20 text-yellow-500 flex items-center justify-center font-bold border border-yellow-500/50">1</span> :
-                     idx === 1 ? <span className="w-8 h-8 rounded-full bg-slate-300/20 text-slate-300 flex items-center justify-center font-bold border border-slate-300/50">2</span> :
-                     idx === 2 ? <span className="w-8 h-8 rounded-full bg-orange-500/20 text-orange-500 flex items-center justify-center font-bold border border-orange-500/50">3</span> :
-                     <span className="w-8 h-8 flex items-center justify-center font-bold text-slate-500">{idx + 1}</span>}
-                  </div>
-                  <div className="col-span-5 font-medium flex items-center gap-2">
-                    {p.name}
-                    {p.id === socket?.id && <span className="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full">You</span>}
-                    {idx === 0 && allFinished && subtitle.includes('wins!') && <span className="text-yellow-500">👑</span>}
-                  </div>
-                  <div className="col-span-3 text-center font-bold text-lg text-emerald-400">
-                    {p.score !== null ? `${p.score}%` : '-'}
-                  </div>
-                  <div className="col-span-2 text-center text-slate-400 font-mono text-sm">
-                    {p.timeTaken ? formatTime(p.timeTaken) : '-'}
-                  </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+            <div className="w-full h-px bg-slate-700/50 my-2"></div>
+            
+            <div className="flex justify-around w-full">
+              <div className="text-center">
+                <span className="text-slate-400 font-bold uppercase tracking-wider text-xs block mb-1">Time Taken</span>
+                <span className="font-mono text-xl">{timeTaken ? formatTime(timeTaken) : '-'}</span>
+              </div>
+              <div className="text-center">
+                <span className="text-slate-400 font-bold uppercase tracking-wider text-xs block mb-1">Questions</span>
+                <span className="font-mono text-xl">{examData.length}</span>
+              </div>
             </div>
           </motion.div>
 
@@ -915,22 +740,10 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             <Button size="lg" variant="outline" onClick={handleReviewExam}>
               <Eye size={20} className="mr-2" /> Review Answers
             </Button>
-            {isHost && (
-              <Button size="lg" onClick={handleRestartExam}>
-                <Shuffle size={20} className="mr-2" /> Play Again
-              </Button>
-            )}
+            <Button size="lg" onClick={handleRestartExam}>
+              <Shuffle size={20} className="mr-2" /> Play Again
+            </Button>
           </motion.div>
-          {!isHost && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1 }}
-              className="text-center text-slate-400 pt-4"
-            >
-              Waiting for host to restart or close the room...
-            </motion.div>
-          )}
         </div>
       </motion.div>
     );

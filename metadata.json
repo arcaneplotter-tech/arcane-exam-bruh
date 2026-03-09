@@ -1,5 +1,5 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Arcane Exams",
+  "description": "A personal, client-side exam platform that allows users to load questions from CSV and take exams locally.",
   "requestFramePermissions": []
 }
