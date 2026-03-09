@@ -20,6 +20,8 @@ export function HostView({ onBack }: HostViewProps) {
   const [timeLeft, setTimeLeft] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [csvText, setCsvText] = useState('');
+  const [hostName, setHostName] = useState('');
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const playersRef = useRef<Player[]>([]);
@@ -76,7 +78,7 @@ export function HostView({ onBack }: HostViewProps) {
 
   const broadcast = (message: MessageType) => {
     playersRef.current.forEach(p => {
-      if (p.connection.open) {
+      if (p.connection && p.connection.open) {
         p.connection.send(message);
       }
     });
@@ -142,6 +144,37 @@ export function HostView({ onBack }: HostViewProps) {
         setQuestions(parsedQuestions);
       }
     });
+  };
+
+  const handleTextLoad = () => {
+    if (!csvText.trim()) return;
+    Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const parsedQuestions: Question[] = results.data.map((row: any, index) => ({
+          id: `q-${index}`,
+          text: row.Question || row.question,
+          options: [row.Option1 || row.option1, row.Option2 || row.option2, row.Option3 || row.option3, row.Option4 || row.option4].filter(Boolean),
+          correctAnswer: row.CorrectAnswer || row.correctAnswer,
+          timeLimit: parseInt(row.TimeLimit || row.timeLimit || '20', 10)
+        }));
+        setQuestions(parsedQuestions);
+      }
+    });
+  };
+
+  const handleHostJoin = () => {
+    if (!hostName.trim()) return;
+    const newPlayer: Player = {
+      id: 'host',
+      name: hostName.trim(),
+      score: 0,
+      hasAnswered: false,
+      currentAnswer: null,
+      connection: null as any
+    };
+    setPlayers(prev => [...prev, newPlayer]);
   };
 
   const startGame = () => {
@@ -216,7 +249,7 @@ export function HostView({ onBack }: HostViewProps) {
         const points = isCorrect ? Math.round(1000 * (timeLeftRef.current / q.timeLimit)) : 0;
         
         // Send individual result
-        if (p.connection.open) {
+        if (p.connection && p.connection.open) {
           p.connection.send({
             type: 'ANSWER_RESULT',
             correct: isCorrect,
@@ -289,20 +322,68 @@ export function HostView({ onBack }: HostViewProps) {
                 <p className="text-zinc-400">Upload your questions and wait for players to join.</p>
               </div>
 
-              <div className="bg-zinc-900/50 border border-white/10 rounded-2xl p-8 text-center">
-                <Upload className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">Upload Questions (CSV)</h3>
-                <p className="text-sm text-zinc-400 mb-6">
-                  Format: Question, Option1, Option2, Option3, Option4, CorrectAnswer, TimeLimit
-                </p>
-                <label className="cursor-pointer inline-flex items-center justify-center gap-2 bg-white text-black px-6 py-3 rounded-xl font-medium hover:bg-zinc-200 transition-colors">
-                  Choose File
-                  <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
-                </label>
+              <div className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6">
+                <h3 className="text-lg font-medium mb-4 flex items-center justify-center gap-2">
+                  <Upload className="w-5 h-5 text-zinc-400" />
+                  Load Questions (CSV)
+                </h3>
+                <div className="space-y-4">
+                  <label className="cursor-pointer block w-full bg-white text-black px-4 py-3 rounded-xl font-medium text-center hover:bg-zinc-200 transition-colors">
+                    Upload CSV File
+                    <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                  </label>
+                  
+                  <div className="flex items-center gap-4 text-sm text-zinc-500">
+                    <div className="flex-1 h-px bg-white/10"></div>
+                    OR PASTE TEXT
+                    <div className="flex-1 h-px bg-white/10"></div>
+                  </div>
+                  
+                  <textarea 
+                    className="w-full bg-zinc-950 border border-white/10 rounded-xl p-3 text-sm text-zinc-300 h-24 focus:outline-none focus:border-indigo-500 transition-colors"
+                    placeholder="Question,Option1,Option2,Option3,Option4,CorrectAnswer,TimeLimit&#10;What is 2+2?,3,4,5,6,4,20"
+                    value={csvText}
+                    onChange={e => setCsvText(e.target.value)}
+                  />
+                  <button 
+                    onClick={handleTextLoad}
+                    disabled={!csvText.trim()}
+                    className="w-full bg-zinc-800 text-white px-4 py-3 rounded-xl font-medium hover:bg-zinc-700 disabled:opacity-50 transition-colors"
+                  >
+                    Load from Text
+                  </button>
+                </div>
                 {questions.length > 0 && (
-                  <div className="mt-4 text-emerald-400 flex items-center justify-center gap-2">
+                  <div className="mt-4 text-emerald-400 flex items-center justify-center gap-2 bg-emerald-500/10 py-2 rounded-lg">
                     <CheckCircle2 className="w-4 h-4" />
                     {questions.length} questions loaded
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6">
+                <h3 className="text-lg font-medium mb-4">Join as Player</h3>
+                {!players.some(p => p.id === 'host') ? (
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Your Nickname" 
+                      value={hostName}
+                      onChange={e => setHostName(e.target.value)}
+                      className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                    />
+                    <button 
+                      onClick={handleHostJoin}
+                      disabled={!hostName.trim()}
+                      className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-medium hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+                    >
+                      Join
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-emerald-400 flex items-center gap-2 bg-emerald-500/10 py-3 px-4 rounded-xl">
+                    <CheckCircle2 className="w-5 h-5" />
+                    Joined as <span className="font-bold text-white">{players.find(p => p.id === 'host')?.name}</span>
                   </div>
                 )}
               </div>
@@ -390,22 +471,47 @@ export function HostView({ onBack }: HostViewProps) {
                 const isCorrect = showAnswer && opt === questions[currentQuestionIndex].correctAnswer;
                 const isWrong = showAnswer && !isCorrect;
                 
+                const hostPlayer = players.find(p => p.id === 'host');
+                const isHostPlayer = !!hostPlayer;
+                const hostHasAnswered = hostPlayer?.hasAnswered;
+                const isHostSelected = hostPlayer?.currentAnswer === opt;
+
+                const handleHostAnswer = () => {
+                  if (!isHostPlayer || hostHasAnswered || showAnswer) return;
+                  setPlayers(prev => prev.map(p => {
+                    if (p.id === 'host') {
+                      return { ...p, hasAnswered: true, currentAnswer: opt };
+                    }
+                    return p;
+                  }));
+                };
+                
                 return (
-                  <div
+                  <button
                     key={i}
+                    onClick={handleHostAnswer}
+                    disabled={showAnswer || (isHostPlayer && hostHasAnswered) || !isHostPlayer}
                     className={clsx(
-                      "p-6 rounded-2xl text-xl font-medium flex items-center justify-between transition-all",
+                      "p-6 rounded-2xl text-xl font-medium flex items-center justify-between transition-all text-left border-2",
                       showAnswer 
                         ? isCorrect 
-                          ? "bg-emerald-500/20 border-emerald-500 text-emerald-100 border-2" 
-                          : "bg-zinc-900 border-zinc-800 text-zinc-600 border-2 opacity-50"
-                        : "bg-zinc-800 border border-white/10"
+                          ? "bg-emerald-500/20 border-emerald-500 text-emerald-100" 
+                          : isHostSelected
+                            ? "bg-red-500/20 border-red-500 text-red-100"
+                            : "bg-zinc-900 border-zinc-800 text-zinc-600 opacity-50"
+                        : isHostPlayer
+                          ? hostHasAnswered
+                            ? isHostSelected
+                              ? "bg-indigo-500/20 border-indigo-500 text-indigo-100"
+                              : "bg-zinc-900 border-zinc-800 text-zinc-600 opacity-50"
+                            : "bg-zinc-800 border-white/10 hover:bg-zinc-700 hover:border-white/30 cursor-pointer"
+                          : "bg-zinc-800 border-white/10 cursor-default"
                     )}
                   >
                     <span>{opt}</span>
-                    {isCorrect && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
-                    {isWrong && <XCircle className="w-6 h-6 text-zinc-600" />}
-                  </div>
+                    {showAnswer && isCorrect && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
+                    {showAnswer && !isCorrect && isHostSelected && <XCircle className="w-6 h-6 text-red-400" />}
+                  </button>
                 );
               })}
             </div>
