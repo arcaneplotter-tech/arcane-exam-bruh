@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Clock, Upload, CheckCircle, Flag, ChevronLeft, ChevronRight,
   LayoutGrid, Eye, Play, LogOut, Check, Timer, HelpCircle, Trophy,
@@ -299,12 +300,22 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
   // --- Renderers ---
   if (appState === 'welcome') {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4"
+      >
         <div className="max-w-md w-full bg-slate-800/50 backdrop-blur-xl p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-8">
-          <div className="text-center">
+          <motion.div 
+            initial={{ scale: 0.9 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", bounce: 0.5 }}
+            className="text-center"
+          >
             <h1 className="text-4xl font-black tracking-tight mb-2">Arcane<span className="text-indigo-400">EXAMS</span></h1>
             <p className="text-slate-400">Multiplayer Exam Platform</p>
-          </div>
+          </motion.div>
           
           <div className="space-y-4">
             <div>
@@ -313,7 +324,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
                 type="text" 
                 value={playerName} 
                 onChange={e => setPlayerName(e.target.value)}
-                className="w-full p-3 bg-slate-900/50 rounded-xl border border-slate-700 focus:border-indigo-500 outline-none"
+                className="w-full p-3 bg-slate-900/50 rounded-xl border border-slate-700 focus:border-indigo-500 outline-none transition-colors"
                 placeholder="Enter your name"
               />
             </div>
@@ -332,7 +343,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
                   type="text" 
                   value={roomCode} 
                   onChange={e => setRoomCode(e.target.value.toUpperCase())}
-                  className="flex-1 p-3 bg-slate-900/50 rounded-xl border border-slate-700 focus:border-indigo-500 outline-none uppercase"
+                  className="flex-1 p-3 bg-slate-900/50 rounded-xl border border-slate-700 focus:border-indigo-500 outline-none uppercase transition-colors"
                   placeholder="ROOM CODE"
                   maxLength={6}
                 />
@@ -341,15 +352,24 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   if (appState === 'lobby') {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-8">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-8"
+      >
         <div className="max-w-4xl mx-auto space-y-6">
-          <div className="bg-slate-800/50 backdrop-blur-xl p-6 rounded-3xl border border-slate-700 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+          <motion.div 
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-slate-800/50 backdrop-blur-xl p-6 rounded-3xl border border-slate-700 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4"
+          >
             <div>
               <h2 className="text-2xl font-bold">Room Lobby</h2>
               <p className="text-slate-400">Room Code: <span className="font-mono text-indigo-400 font-bold text-xl tracking-widest">{room?.id}</span></p>
@@ -365,22 +385,40 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
                 Waiting for host to start...
               </div>
             )}
-          </div>
+          </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-slate-800/50 backdrop-blur-xl p-6 rounded-3xl border border-slate-700 shadow-xl space-y-4">
+            <motion.div 
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="bg-slate-800/50 backdrop-blur-xl p-6 rounded-3xl border border-slate-700 shadow-xl space-y-4"
+            >
               <h3 className="text-lg font-bold flex items-center gap-2"><Users size={20}/> Players ({room?.players.length})</h3>
               <div className="space-y-2">
-                {room?.players.map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-700">
-                    <span className="font-medium">{p.name} {p.id === socket?.id ? '(You)' : ''}</span>
-                    {p.id === room.hostId && <span className="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded-full font-bold">HOST</span>}
-                  </div>
-                ))}
+                <AnimatePresence>
+                  {room?.players.map((p: any) => (
+                    <motion.div 
+                      key={p.id} 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-700"
+                    >
+                      <span className="font-medium">{p.name} {p.id === socket?.id ? '(You)' : ''}</span>
+                      {p.id === room.hostId && <span className="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded-full font-bold">HOST</span>}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
-            </div>
+            </motion.div>
 
-            <div className="bg-slate-800/50 backdrop-blur-xl p-6 rounded-3xl border border-slate-700 shadow-xl space-y-4">
+            <motion.div 
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="bg-slate-800/50 backdrop-blur-xl p-6 rounded-3xl border border-slate-700 shadow-xl space-y-4"
+            >
               <h3 className="text-lg font-bold flex items-center gap-2"><LayoutGrid size={20}/> Exam Settings</h3>
               
               {isHost ? (
@@ -390,9 +428,14 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
                       <span className="text-sm font-bold text-slate-400">Questions Loaded</span>
                       <span className="font-bold text-indigo-400">{room?.examData?.length || 0}</span>
                     </div>
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => setPasteModalOpen(true)}>
-                      <Upload size={16} className="mr-2"/> Load CSV Questions
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => setPasteModalOpen(true)}>
+                        <Upload size={16} className="mr-2"/> Load CSV
+                      </Button>
+                      <Button variant="ai" size="icon" onClick={copyAITemplate} title="Copy AI Prompt">
+                        <Sparkles size={16} />
+                      </Button>
+                    </div>
                   </div>
                   
                   <div>
@@ -420,61 +463,86 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
                   </div>
                 </div>
               )}
-            </div>
+            </motion.div>
           </div>
         </div>
 
         {/* Paste Modal */}
-        {isPasteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl p-6 flex flex-col max-h-[90vh]">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Paste CSV Questions</h2>
-                <button onClick={() => setPasteModalOpen(false)} className="text-slate-400 hover:text-white"><XCircle size={24}/></button>
-              </div>
-              <textarea
-                value={pasteContent}
-                onChange={(e) => setPasteContent(e.target.value)}
-                placeholder="Paste your CSV content here..."
-                className="w-full flex-1 p-4 bg-slate-900 rounded-xl border border-slate-700 font-mono text-sm resize-none outline-none focus:border-indigo-500"
-              />
-              <div className="flex gap-3 mt-4">
-                <Button variant="outline" onClick={() => setPasteContent(SAMPLE_CSV)} className="flex-1">Load Sample</Button>
-                <Button variant="ai" onClick={copyAITemplate} className="flex-1">
-                  <Sparkles size={16} className="mr-2" /> Copy AI Prompt
-                </Button>
-                <Button 
-                  className="flex-1"
-                  onClick={() => {
-                    if (pasteContent.trim()) {
-                      const questions = parseCSV(pasteContent);
-                      if (questions.length > 0) {
-                        handleLoadQuestions(questions);
-                      } else {
-                        alert("No valid questions found.");
+        <AnimatePresence>
+          {isPasteModalOpen && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            >
+              <motion.div 
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl p-6 flex flex-col max-h-[90vh]"
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">Paste CSV Questions</h2>
+                  <button onClick={() => setPasteModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><XCircle size={24}/></button>
+                </div>
+                <textarea
+                  value={pasteContent}
+                  onChange={(e) => setPasteContent(e.target.value)}
+                  placeholder="Paste your CSV content here..."
+                  className="w-full flex-1 p-4 bg-slate-900 rounded-xl border border-slate-700 font-mono text-sm resize-none outline-none focus:border-indigo-500 transition-colors"
+                />
+                <div className="flex gap-3 mt-4">
+                  <Button variant="outline" onClick={() => setPasteContent(SAMPLE_CSV)} className="flex-1">Load Sample</Button>
+                  <Button variant="ai" onClick={copyAITemplate} className="flex-1">
+                    <Sparkles size={16} className="mr-2" /> Copy AI Prompt
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    onClick={() => {
+                      if (pasteContent.trim()) {
+                        const questions = parseCSV(pasteContent);
+                        if (questions.length > 0) {
+                          handleLoadQuestions(questions);
+                        } else {
+                          alert("No valid questions found.");
+                        }
                       }
-                    }
-                  }}
-                >
-                  Load Questions
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+                    }}
+                  >
+                    Load Questions
+                  </Button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     );
   }
 
   if (appState === 'countdown') {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4">
-        <div className="text-center space-y-8 animate-pulse">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4"
+      >
+        <div className="text-center space-y-8">
           <h2 className="text-3xl font-bold text-slate-400">Exam starting in...</h2>
-          <div className="text-9xl font-black text-indigo-500">{countdown}</div>
+          <motion.div 
+            key={countdown}
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 1.5, opacity: 0 }}
+            className="text-9xl font-black text-indigo-500"
+          >
+            {countdown}
+          </motion.div>
           <p className="text-slate-500">Get ready!</p>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -483,7 +551,12 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
     if (!currentQuestion) return <div>Loading...</div>;
 
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="min-h-screen bg-slate-900 text-slate-100 flex flex-col"
+      >
         <header className="sticky top-0 z-40 w-full bg-slate-800/80 backdrop-blur-md border-b border-slate-700 shadow-sm">
           <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
             <div className="font-bold text-lg">Arcane<span className="text-indigo-400">EXAMS</span></div>
@@ -522,39 +595,50 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             </Button>
           </div>
 
-          <div className="bg-slate-800/50 backdrop-blur-xl p-6 md:p-8 rounded-3xl border border-slate-700 shadow-xl mb-6">
-            <h3 className="text-lg md:text-xl font-semibold leading-relaxed">{currentQuestion.text}</h3>
-          </div>
+          <AnimatePresence mode="wait">
+            <motion.div 
+              key={currentQuestionIndex}
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-col gap-3 flex-1"
+            >
+              <div className="bg-slate-800/50 backdrop-blur-xl p-6 md:p-8 rounded-3xl border border-slate-700 shadow-xl mb-6">
+                <h3 className="text-lg md:text-xl font-semibold leading-relaxed">{currentQuestion.text}</h3>
+              </div>
 
-          <div className="flex flex-col gap-3 flex-1">
-            {currentQuestion.isEssay ? (
-              <textarea
-                value={userAnswers[currentQuestionIndex] || ''}
-                onChange={(e) => setUserAnswers(prev => ({ ...prev, [currentQuestionIndex]: e.target.value }))}
-                placeholder="Type your answer here..."
-                className="w-full flex-1 min-h-[200px] p-6 rounded-2xl bg-slate-800/50 border border-slate-700 outline-none focus:border-indigo-500 resize-none"
-              />
-            ) : (
-              currentQuestion.options.map((option: string, idx: number) => {
-                const isSelected = userAnswers[currentQuestionIndex] === option;
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => setUserAnswers(prev => ({ ...prev, [currentQuestionIndex]: option }))}
-                    className={cn(
-                      "flex items-center gap-4 p-4 md:p-5 rounded-xl border-2 text-left transition-all duration-200",
-                      isSelected ? "border-indigo-500 bg-indigo-500/10" : "border-slate-700 bg-slate-800/50 hover:border-slate-500"
-                    )}
-                  >
-                    <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0", isSelected ? "border-indigo-500 bg-indigo-500" : "border-slate-500")}>
-                      {isSelected && <div className="w-2 h-2 bg-white rounded-full" />}
-                    </div>
-                    <span className="text-base md:text-lg font-medium">{option}</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
+              {currentQuestion.isEssay ? (
+                <textarea
+                  value={userAnswers[currentQuestionIndex] || ''}
+                  onChange={(e) => setUserAnswers(prev => ({ ...prev, [currentQuestionIndex]: e.target.value }))}
+                  placeholder="Type your answer here..."
+                  className="w-full flex-1 min-h-[200px] p-6 rounded-2xl bg-slate-800/50 border border-slate-700 outline-none focus:border-indigo-500 resize-none transition-colors"
+                />
+              ) : (
+                currentQuestion.options.map((option: string, idx: number) => {
+                  const isSelected = userAnswers[currentQuestionIndex] === option;
+                  return (
+                    <motion.button
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      key={idx}
+                      onClick={() => setUserAnswers(prev => ({ ...prev, [currentQuestionIndex]: option }))}
+                      className={cn(
+                        "flex items-center gap-4 p-4 md:p-5 rounded-xl border-2 text-left transition-all duration-200",
+                        isSelected ? "border-indigo-500 bg-indigo-500/10" : "border-slate-700 bg-slate-800/50 hover:border-slate-500"
+                      )}
+                    >
+                      <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors", isSelected ? "border-indigo-500 bg-indigo-500" : "border-slate-500")}>
+                        {isSelected && <motion.div layoutId="selectedDot" className="w-2 h-2 bg-white rounded-full" />}
+                      </div>
+                      <span className="text-base md:text-lg font-medium">{option}</span>
+                    </motion.button>
+                  );
+                })
+              )}
+            </motion.div>
+          </AnimatePresence>
 
           <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-800">
             <Button 
@@ -576,7 +660,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             )}
           </div>
         </main>
-      </div>
+      </motion.div>
     );
   }
 
@@ -588,7 +672,12 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
     const isCorrect = essayEvaluator.isCorrect(userAnswer, currentQuestion.correctAnswer, currentQuestion.isEssay);
 
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="min-h-screen bg-slate-900 text-slate-100 flex flex-col"
+      >
         <header className="sticky top-0 z-40 w-full bg-slate-800/80 backdrop-blur-md border-b border-slate-700 shadow-sm">
           <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
             <div className="font-bold text-lg">Arcane<span className="text-indigo-400">EXAMS</span> <span className="text-slate-500 text-sm ml-2">Review Mode</span></div>
@@ -612,67 +701,84 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             </div>
           </div>
 
-          <div className="bg-slate-800/50 backdrop-blur-xl p-6 md:p-8 rounded-3xl border border-slate-700 shadow-xl mb-6">
-            <h3 className="text-lg md:text-xl font-semibold leading-relaxed">{currentQuestion.text}</h3>
-          </div>
-
-          <div className="flex flex-col gap-3 flex-1">
-            {currentQuestion.isEssay ? (
-              <div className="space-y-4">
-                <div className="p-6 rounded-2xl bg-slate-800/50 border border-slate-700">
-                  <h4 className="text-sm font-bold text-slate-400 mb-2">Your Answer:</h4>
-                  <p className={cn("text-lg", !userAnswer && "text-slate-500 italic")}>{userAnswer || "No answer provided"}</p>
-                </div>
-                <div className="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
-                  <h4 className="text-sm font-bold text-emerald-400 mb-2">Expected Answer:</h4>
-                  <p className="text-lg text-slate-200">{currentQuestion.correctAnswer}</p>
-                </div>
+          <AnimatePresence mode="wait">
+            <motion.div 
+              key={`review-${currentQuestionIndex}`}
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-col gap-3 flex-1"
+            >
+              <div className="bg-slate-800/50 backdrop-blur-xl p-6 md:p-8 rounded-3xl border border-slate-700 shadow-xl mb-6">
+                <h3 className="text-lg md:text-xl font-semibold leading-relaxed">{currentQuestion.text}</h3>
               </div>
-            ) : (
-              currentQuestion.options.map((option: string, idx: number) => {
-                const isSelected = userAnswer === option;
-                const isOptionCorrect = essayEvaluator.isCorrect(option, currentQuestion.correctAnswer, false);
-                
-                let optionStyle = "border-slate-700 bg-slate-800/50 opacity-50";
-                let iconStyle = "border-slate-600";
-                let Icon = null;
 
-                if (isOptionCorrect) {
-                  optionStyle = "border-emerald-500 bg-emerald-500/20 text-emerald-100 shadow-lg shadow-emerald-500/10";
-                  iconStyle = "border-emerald-500 bg-emerald-500 text-white";
-                  Icon = Check;
-                } else if (isSelected && !isOptionCorrect) {
-                  optionStyle = "border-red-500 bg-red-500/20 text-red-100";
-                  iconStyle = "border-red-500 bg-red-500 text-white";
-                  Icon = XCircle;
-                }
-
-                return (
-                  <div
-                    key={idx}
-                    className={cn(
-                      "flex items-center gap-4 p-4 md:p-5 rounded-xl border-2 text-left transition-all duration-200",
-                      optionStyle
-                    )}
-                  >
-                    <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0", iconStyle)}>
-                      {Icon && <Icon size={14} strokeWidth={3} />}
-                    </div>
-                    <span className="text-base md:text-lg font-medium">{option}</span>
+              {currentQuestion.isEssay ? (
+                <div className="space-y-4">
+                  <div className="p-6 rounded-2xl bg-slate-800/50 border border-slate-700">
+                    <h4 className="text-sm font-bold text-slate-400 mb-2">Your Answer:</h4>
+                    <p className={cn("text-lg", !userAnswer && "text-slate-500 italic")}>{userAnswer || "No answer provided"}</p>
                   </div>
-                );
-              })
-            )}
+                  <div className="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
+                    <h4 className="text-sm font-bold text-emerald-400 mb-2">Expected Answer:</h4>
+                    <p className="text-lg text-slate-200">{currentQuestion.correctAnswer}</p>
+                  </div>
+                </div>
+              ) : (
+                currentQuestion.options.map((option: string, idx: number) => {
+                  const isSelected = userAnswer === option;
+                  const isOptionCorrect = essayEvaluator.isCorrect(option, currentQuestion.correctAnswer, false);
+                  
+                  let optionStyle = "border-slate-700 bg-slate-800/50 opacity-50";
+                  let iconStyle = "border-slate-600";
+                  let Icon = null;
 
-            {currentQuestion.explanation && (
-              <div className="mt-4 p-6 rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
-                <h4 className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-2">
-                  <HelpCircle size={16} /> Explanation
-                </h4>
-                <p className="text-slate-300 leading-relaxed">{currentQuestion.explanation}</p>
-              </div>
-            )}
-          </div>
+                  if (isOptionCorrect) {
+                    optionStyle = "border-emerald-500 bg-emerald-500/20 text-emerald-100 shadow-lg shadow-emerald-500/10";
+                    iconStyle = "border-emerald-500 bg-emerald-500 text-white";
+                    Icon = Check;
+                  } else if (isSelected && !isOptionCorrect) {
+                    optionStyle = "border-red-500 bg-red-500/20 text-red-100";
+                    iconStyle = "border-red-500 bg-red-500 text-white";
+                    Icon = XCircle;
+                  }
+
+                  return (
+                    <motion.div
+                      initial={{ scale: 0.98, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: idx * 0.05 }}
+                      key={idx}
+                      className={cn(
+                        "flex items-center gap-4 p-4 md:p-5 rounded-xl border-2 text-left transition-all duration-200",
+                        optionStyle
+                      )}
+                    >
+                      <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0", iconStyle)}>
+                        {Icon && <Icon size={14} strokeWidth={3} />}
+                      </div>
+                      <span className="text-base md:text-lg font-medium">{option}</span>
+                    </motion.div>
+                  );
+                })
+              )}
+
+              {currentQuestion.explanation && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="mt-4 p-6 rounded-2xl bg-indigo-500/10 border border-indigo-500/30"
+                >
+                  <h4 className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-2">
+                    <HelpCircle size={16} /> Explanation
+                  </h4>
+                  <p className="text-slate-300 leading-relaxed">{currentQuestion.explanation}</p>
+                </motion.div>
+              )}
+            </motion.div>
+          </AnimatePresence>
 
           <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-800">
             <Button 
@@ -692,27 +798,74 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             </Button>
           </div>
         </main>
-      </div>
+      </motion.div>
     );
   }
 
   if (appState === 'leaderboard' || hasFinished) {
     // Sort players by score descending, then time taken ascending
     const sortedPlayers = [...(room?.players || [])].sort((a: any, b: any) => {
-      if (b.score !== a.score) return (b.score || 0) - (a.score || 0);
-      return (a.timeTaken || 0) - (b.timeTaken || 0);
+      const aScore = a.score !== null ? a.score : -1;
+      const bScore = b.score !== null ? b.score : -1;
+      
+      if (bScore !== aScore) return bScore - aScore;
+      
+      const aTime = a.timeTaken !== null ? a.timeTaken : Infinity;
+      const bTime = b.timeTaken !== null ? b.timeTaken : Infinity;
+      
+      return aTime - bTime;
     });
 
-    return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-8 flex flex-col items-center">
-        <div className="max-w-3xl w-full space-y-8">
-          <div className="text-center space-y-2">
-            <Trophy size={64} className="mx-auto text-yellow-500 mb-4" />
-            <h1 className="text-4xl font-black tracking-tight">Leaderboard</h1>
-            <p className="text-slate-400">Exam completed by all players</p>
-          </div>
+    const allFinished = room?.players?.length > 0 && room.players.every((p: any) => p.finished);
+    let subtitle = "Waiting for other players to finish...";
+    
+    if (allFinished) {
+      if (sortedPlayers.length === 1) {
+        subtitle = `🏆 ${sortedPlayers[0].name} wins!`;
+      } else if (sortedPlayers.length > 1) {
+        const first = sortedPlayers[0];
+        const second = sortedPlayers[1];
+        if (first.score > second.score || (first.score === second.score && first.timeTaken < second.timeTaken)) {
+          subtitle = `🏆 ${first.name} wins!`;
+        } else if (first.score === second.score && first.timeTaken === second.timeTaken) {
+          subtitle = "🤝 It's a tie!";
+        } else {
+          subtitle = "Exam completed by all players";
+        }
+      } else {
+        subtitle = "Exam completed by all players";
+      }
+    }
 
-          <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl border border-slate-700 shadow-2xl overflow-hidden">
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-8 flex flex-col items-center"
+      >
+        <div className="max-w-3xl w-full space-y-8">
+          <motion.div 
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="text-center space-y-2"
+          >
+            <motion.div
+              animate={{ rotate: [0, -10, 10, -10, 10, 0] }}
+              transition={{ duration: 1, delay: 0.5 }}
+            >
+              <Trophy size={64} className="mx-auto text-yellow-500 mb-4" />
+            </motion.div>
+            <h1 className="text-4xl font-black tracking-tight">Leaderboard</h1>
+            <p className="text-slate-400 text-lg">{subtitle}</p>
+          </motion.div>
+
+          <motion.div 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="bg-slate-800/50 backdrop-blur-xl rounded-3xl border border-slate-700 shadow-2xl overflow-hidden"
+          >
             <div className="grid grid-cols-12 gap-4 p-4 bg-slate-800 border-b border-slate-700 font-bold text-slate-400 text-sm uppercase tracking-wider">
               <div className="col-span-2 text-center">Rank</div>
               <div className="col-span-5">Player</div>
@@ -721,8 +874,15 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
             </div>
             
             <div className="divide-y divide-slate-700/50">
-              {sortedPlayers.map((p: any, idx: number) => (
-                <div key={p.id} className={cn("grid grid-cols-12 gap-4 p-4 items-center transition-colors hover:bg-slate-800/30", p.id === socket?.id && "bg-indigo-500/10")}>
+              <AnimatePresence>
+                {sortedPlayers.map((p: any, idx: number) => (
+                  <motion.div 
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.4 + (idx * 0.1) }}
+                    key={p.id} 
+                    className={cn("grid grid-cols-12 gap-4 p-4 items-center transition-colors hover:bg-slate-800/30", p.id === socket?.id && "bg-indigo-500/10")}
+                  >
                   <div className="col-span-2 flex justify-center">
                     {idx === 0 ? <span className="w-8 h-8 rounded-full bg-yellow-500/20 text-yellow-500 flex items-center justify-center font-bold border border-yellow-500/50">1</span> :
                      idx === 1 ? <span className="w-8 h-8 rounded-full bg-slate-300/20 text-slate-300 flex items-center justify-center font-bold border border-slate-300/50">2</span> :
@@ -732,6 +892,7 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
                   <div className="col-span-5 font-medium flex items-center gap-2">
                     {p.name}
                     {p.id === socket?.id && <span className="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full">You</span>}
+                    {idx === 0 && allFinished && subtitle.includes('wins!') && <span className="text-yellow-500">👑</span>}
                   </div>
                   <div className="col-span-3 text-center font-bold text-lg text-emerald-400">
                     {p.score !== null ? `${p.score}%` : '-'}
@@ -739,12 +900,18 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
                   <div className="col-span-2 text-center text-slate-400 font-mono text-sm">
                     {p.timeTaken ? formatTime(p.timeTaken) : '-'}
                   </div>
-                </div>
-              ))}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="flex justify-center gap-4 pt-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1 }}
+            className="flex justify-center gap-4 pt-4"
+          >
             <Button size="lg" variant="outline" onClick={handleReviewExam}>
               <Eye size={20} className="mr-2" /> Review Answers
             </Button>
@@ -753,14 +920,19 @@ Generate 10 questions about [INSERT TOPIC HERE]:`;
                 <Shuffle size={20} className="mr-2" /> Play Again
               </Button>
             )}
-          </div>
+          </motion.div>
           {!isHost && (
-            <div className="text-center text-slate-400 pt-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1 }}
+              className="text-center text-slate-400 pt-4"
+            >
               Waiting for host to restart or close the room...
-            </div>
+            </motion.div>
           )}
         </div>
-      </div>
+      </motion.div>
     );
   }
 
