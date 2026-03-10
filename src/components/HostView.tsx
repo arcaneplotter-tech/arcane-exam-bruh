@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Peer, DataConnection } from 'peerjs';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Users, Play, ArrowLeft, Trophy, CheckCircle2, XCircle, Loader2, Copy, Check } from 'lucide-react';
+import { Upload, Users, Play, ArrowLeft, Trophy, CheckCircle2, XCircle, Loader2, Copy, Check, Timer } from 'lucide-react';
 import Papa from 'papaparse';
-import { Question, Player, GameState, MessageType } from '../types';
+import { Question, Player, GameState, MessageType, GameSettings } from '../types';
+import { EnhancedQuestionCard } from './ExamUI';
 import { clsx } from 'clsx';
 
 interface HostViewProps {
@@ -22,12 +23,17 @@ export function HostView({ onBack }: HostViewProps) {
   const [copied, setCopied] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [hostName, setHostName] = useState('');
+  const [settings, setSettings] = useState<GameSettings>({
+    timePerQuestion: 20,
+    examType: 'NORMAL'
+  });
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const playersRef = useRef<Player[]>([]);
   const timeLeftRef = useRef(0);
   const currentQuestionIndexRef = useRef(0);
   const questionsRef = useRef<Question[]>([]);
+  const settingsRef = useRef<GameSettings>(settings);
 
   // Keep ref updated for callbacks
   useEffect(() => {
@@ -45,6 +51,10 @@ export function HostView({ onBack }: HostViewProps) {
   useEffect(() => {
     questionsRef.current = questions;
   }, [questions]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   useEffect(() => {
     // Generate a 6 digit random code
@@ -106,6 +116,36 @@ export function HostView({ onBack }: HostViewProps) {
         playerId: conn.peer,
         gameState: gameState 
       });
+
+      if (gameState === 'QUICK_EXAM') {
+        setTimeout(() => {
+          conn.send({ 
+            type: 'STATE_UPDATE', 
+            state: 'QUICK_EXAM', 
+            data: { 
+              questions: questionsRef.current.map(q => ({ id: q.id, text: q.text, options: q.options, timeLimit: q.timeLimit })),
+              totalTime: questionsRef.current.reduce((acc, q) => acc + q.timeLimit, 0)
+            } 
+          });
+        }, 500);
+      } else if (gameState === 'QUESTION') {
+        setTimeout(() => {
+          conn.send({ 
+            type: 'STATE_UPDATE', 
+            state: 'QUESTION', 
+            data: { 
+              question: {
+                id: questionsRef.current[currentQuestionIndexRef.current].id,
+                text: questionsRef.current[currentQuestionIndexRef.current].text,
+                options: questionsRef.current[currentQuestionIndexRef.current].options,
+                timeLimit: questionsRef.current[currentQuestionIndexRef.current].timeLimit
+              },
+              questionIndex: currentQuestionIndexRef.current,
+              totalQuestions: questionsRef.current.length
+            } 
+          });
+        }, 500);
+      }
       
       // Broadcast updated player list
       setTimeout(() => {
@@ -119,49 +159,110 @@ export function HostView({ onBack }: HostViewProps) {
     if (data.type === 'SUBMIT_ANSWER') {
       setPlayers(prev => prev.map(p => {
         if (p.id === conn.peer && !p.hasAnswered) {
-          return { ...p, hasAnswered: true, currentAnswer: data.answer };
+          const q = questionsRef.current[currentQuestionIndexRef.current];
+          const isCorrect = data.answer === q.correctAnswer;
+          const points = isCorrect ? Math.round(1000 * (timeLeftRef.current / q.timeLimit)) : 0;
+          
+          if (conn.open) {
+            conn.send({
+              type: 'ANSWER_RESULT',
+              correct: isCorrect,
+              score: points,
+              correctAnswer: q.correctAnswer
+            });
+          }
+          
+          return { ...p, hasAnswered: true, currentAnswer: data.answer, score: p.score + points };
+        }
+        return p;
+      }));
+    }
+
+    if (data.type === 'SUBMIT_EXAM') {
+      setPlayers(prev => prev.map(p => {
+        if (p.id === conn.peer && !p.hasAnswered) {
+          let totalScore = 0;
+          const questions = questionsRef.current;
+          const totalTime = questions.reduce((acc, q) => acc + q.timeLimit, 0);
+          
+          let correctAnswers = 0;
+          questions.forEach(q => {
+            const answer = data.answers[q.id];
+            if (answer === q.correctAnswer) {
+              correctAnswers++;
+            }
+          });
+
+          const timeBonus = Math.max(0, Math.round(1000 * ((totalTime - data.timeTaken) / totalTime)));
+          totalScore = (correctAnswers * 1000) + (correctAnswers > 0 ? timeBonus : 0);
+
+          return { ...p, hasAnswered: true, score: totalScore, timeTaken: data.timeTaken };
         }
         return p;
       }));
     }
   };
 
+  const parseCSV = (text: string): Question[] => {
+    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+    const questions: Question[] = [];
+    let startIndex = 0;
+    if (lines.length > 0) {
+        const firstLineLower = lines[0].toLowerCase();
+        if (firstLineLower.startsWith('id') || firstLineLower.startsWith('question')) startIndex = 1;
+    }
+    for (let i = startIndex; i < lines.length; i++) {
+        const cols = lines[i].split(';').map(c => c.trim());
+        if (cols.length < 2) continue;
+        const id = cols[0];
+        const text = cols[1];
+        const optionsRaw = cols[2] || '';
+        const correctAnswer = cols[3] || '';
+        const imageUrl = cols[4] || undefined;
+        const explanation = cols[5] || '';
+        const category = cols[6] || 'General';
+        const difficulty = cols[7] || 'Medium';
+        let options: string[] = [];
+        let isEssay = false;
+        if (optionsRaw.toUpperCase() === 'ESSAY' || !optionsRaw) {
+            isEssay = true;
+        } else {
+            options = optionsRaw.includes('|') ? optionsRaw.split('|').map(o => o.trim()) : optionsRaw.split(',').map(o => o.trim());
+        }
+        questions.push({ 
+            id, 
+            text, 
+            options, 
+            correctAnswer, 
+            imageUrl, 
+            explanation,
+            isEssay, 
+            category, 
+            difficulty,
+            timeLimit: 20
+        });
+    }
+    return questions;
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const parsedQuestions: Question[] = results.data.map((row: any, index) => ({
-          id: `q-${index}`,
-          text: row.Question || row.question,
-          options: [row.Option1 || row.option1, row.Option2 || row.option2, row.Option3 || row.option3, row.Option4 || row.option4].filter(Boolean),
-          correctAnswer: row.CorrectAnswer || row.correctAnswer,
-          timeLimit: parseInt(row.TimeLimit || row.timeLimit || '20', 10)
-        }));
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (ev.target?.result) {
+        const parsedQuestions = parseCSV(ev.target.result as string);
         setQuestions(parsedQuestions);
       }
-    });
+    };
+    reader.readAsText(file);
   };
 
   const handleTextLoad = () => {
     if (!csvText.trim()) return;
-    Papa.parse(csvText, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const parsedQuestions: Question[] = results.data.map((row: any, index) => ({
-          id: `q-${index}`,
-          text: row.Question || row.question,
-          options: [row.Option1 || row.option1, row.Option2 || row.option2, row.Option3 || row.option3, row.Option4 || row.option4].filter(Boolean),
-          correctAnswer: row.CorrectAnswer || row.correctAnswer,
-          timeLimit: parseInt(row.TimeLimit || row.timeLimit || '20', 10)
-        }));
-        setQuestions(parsedQuestions);
-      }
-    });
+    const parsedQuestions = parseCSV(csvText);
+    setQuestions(parsedQuestions);
   };
 
   const handleHostJoin = () => {
@@ -189,9 +290,58 @@ export function HostView({ onBack }: HostViewProps) {
       countdown--;
       if (countdown <= 0) {
         clearInterval(interval);
-        startQuestion(0);
+        if (settingsRef.current.examType === 'QUICK') {
+          startQuickExam();
+        } else {
+          startQuestion(0);
+        }
       }
     }, 1000);
+  };
+
+  const startQuickExam = () => {
+    setGameState('QUICK_EXAM');
+    
+    // Reset player answers
+    setPlayers(prev => prev.map(p => ({ ...p, hasAnswered: false, currentAnswer: null, score: 0, timeTaken: 0 })));
+    
+    // Apply timePerQuestion setting to all questions if needed, or just calculate total time
+    const totalTime = questionsRef.current.reduce((acc, q) => acc + q.timeLimit, 0);
+    setTimeLeft(totalTime);
+    
+    broadcast({ 
+      type: 'STATE_UPDATE', 
+      state: 'QUICK_EXAM', 
+      data: { 
+        questions: questionsRef.current.map(q => ({ id: q.id, text: q.text, options: q.options, timeLimit: q.timeLimit })),
+        totalTime
+      } 
+    });
+
+    if (timerRef.current) clearInterval(timerRef.current);
+    
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          handleQuickExamEnd();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleQuickExamEnd = () => {
+    setGameState('LEADERBOARD');
+    broadcast({ 
+      type: 'STATE_UPDATE', 
+      state: 'LEADERBOARD',
+      data: {
+        leaderboard: playersRef.current.map(p => ({ id: p.id, name: p.name, score: p.score, timeTaken: p.timeTaken })).sort((a, b) => b.score - a.score),
+        fullQuestions: questionsRef.current // Send full questions including correct answers for review
+      }
+    });
   };
 
   const startQuestion = (index: number) => {
@@ -235,32 +385,29 @@ export function HostView({ onBack }: HostViewProps) {
       if (timerRef.current) clearInterval(timerRef.current);
       handleQuestionEnd();
     }
+    if (gameState === 'QUICK_EXAM' && players.length > 0) {
+      const nonHostPlayers = players.filter(p => p.id !== 'host');
+      if (nonHostPlayers.length > 0 && nonHostPlayers.every(p => p.hasAnswered)) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        handleQuickExamEnd();
+      }
+    }
   }, [players, gameState]);
 
   const handleQuestionEnd = () => {
     setShowAnswer(true);
     const q = questionsRef.current[currentQuestionIndexRef.current];
     
-    // Calculate scores
-    setPlayers(prev => {
-      const updated = prev.map(p => {
-        const isCorrect = p.currentAnswer === q.correctAnswer;
-        // Simple scoring: 1000 points for correct, scaled by time left
-        const points = isCorrect ? Math.round(1000 * (timeLeftRef.current / q.timeLimit)) : 0;
-        
-        // Send individual result
-        if (p.connection && p.connection.open) {
-          p.connection.send({
-            type: 'ANSWER_RESULT',
-            correct: isCorrect,
-            score: points,
-            correctAnswer: q.correctAnswer
-          });
-        }
-        
-        return { ...p, score: p.score + points };
-      });
-      return updated;
+    // Send result to players who didn't answer
+    playersRef.current.forEach(p => {
+      if (!p.hasAnswered && p.connection && p.connection.open) {
+        p.connection.send({
+          type: 'ANSWER_RESULT',
+          correct: false,
+          score: 0,
+          correctAnswer: q.correctAnswer
+        });
+      }
     });
   };
 
@@ -362,6 +509,39 @@ export function HostView({ onBack }: HostViewProps) {
               </div>
 
               <div className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6">
+                <h3 className="text-lg font-medium mb-4">Game Settings</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-zinc-400 mb-2">Exam Type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setSettings({ ...settings, examType: 'NORMAL' })}
+                        className={clsx(
+                          "py-2 px-4 rounded-xl text-sm font-medium transition-colors border",
+                          settings.examType === 'NORMAL' 
+                            ? "bg-indigo-600 border-indigo-500 text-white" 
+                            : "bg-zinc-800 border-white/10 text-zinc-400 hover:bg-zinc-700"
+                        )}
+                      >
+                        Normal (Host Controlled)
+                      </button>
+                      <button
+                        onClick={() => setSettings({ ...settings, examType: 'QUICK' })}
+                        className={clsx(
+                          "py-2 px-4 rounded-xl text-sm font-medium transition-colors border",
+                          settings.examType === 'QUICK' 
+                            ? "bg-indigo-600 border-indigo-500 text-white" 
+                            : "bg-zinc-800 border-white/10 text-zinc-400 hover:bg-zinc-700"
+                        )}
+                      >
+                        Quick (Self-Paced)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6">
                 <h3 className="text-lg font-medium mb-4">Join as Player</h3>
                 {!players.some(p => p.id === 'host') ? (
                   <div className="flex gap-2">
@@ -449,71 +629,50 @@ export function HostView({ onBack }: HostViewProps) {
         )}
 
         {gameState === 'QUESTION' && questions[currentQuestionIndex] && (
-          <div className="w-full max-w-5xl flex flex-col items-center">
+          <div className="w-full max-w-6xl flex flex-col items-center">
             <div className="w-full flex items-center justify-between mb-8">
-              <div className="text-zinc-400 font-medium">
+              <span className="inline-block px-5 py-2 rounded-full bg-white/10 text-white/70 font-medium tracking-widest uppercase">
                 Question {currentQuestionIndex + 1} of {questions.length}
-              </div>
+              </span>
               <div className={clsx(
-                "w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold border-4",
-                timeLeft <= 5 ? "border-red-500 text-red-500" : "border-indigo-500 text-indigo-500"
+                "w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold border-4 shadow-xl",
+                timeLeft <= 5 ? "border-red-500 text-red-500 bg-red-500/10 animate-pulse" : "border-indigo-500 text-indigo-400 bg-indigo-500/10"
               )}>
                 {timeLeft}
               </div>
             </div>
 
-            <h2 className="text-4xl md:text-5xl font-bold text-center mb-12 leading-tight">
-              {questions[currentQuestionIndex].text}
-            </h2>
+            <div className="w-full mb-12 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-white/5 rounded-t-3xl z-10">
+                <motion.div 
+                  className="h-full bg-indigo-500"
+                  initial={{ width: '100%' }}
+                  animate={{ width: `${(timeLeft / questions[currentQuestionIndex].timeLimit) * 100}%` }}
+                  transition={{ duration: 1, ease: "linear" }}
+                />
+              </div>
+              <EnhancedQuestionCard
+                question={questions[currentQuestionIndex]}
+                selectedAnswer={players.find(p => p.id === 'host')?.currentAnswer}
+                onSelectAnswer={(opt: string) => {
+                  const hostPlayer = players.find(p => p.id === 'host');
+                  if (!hostPlayer || hostPlayer.hasAnswered || showAnswer) return;
+                  
+                  const q = questions[currentQuestionIndex];
+                  const isCorrect = opt === q.correctAnswer;
+                  const points = isCorrect ? Math.round(1000 * (timeLeftRef.current / q.timeLimit)) : 0;
 
-            <div className="w-full grid md:grid-cols-2 gap-4 mb-12">
-              {questions[currentQuestionIndex].options.map((opt, i) => {
-                const isCorrect = showAnswer && opt === questions[currentQuestionIndex].correctAnswer;
-                const isWrong = showAnswer && !isCorrect;
-                
-                const hostPlayer = players.find(p => p.id === 'host');
-                const isHostPlayer = !!hostPlayer;
-                const hostHasAnswered = hostPlayer?.hasAnswered;
-                const isHostSelected = hostPlayer?.currentAnswer === opt;
-
-                const handleHostAnswer = () => {
-                  if (!isHostPlayer || hostHasAnswered || showAnswer) return;
                   setPlayers(prev => prev.map(p => {
                     if (p.id === 'host') {
-                      return { ...p, hasAnswered: true, currentAnswer: opt };
+                      return { ...p, hasAnswered: true, currentAnswer: opt, score: p.score + points };
                     }
                     return p;
                   }));
-                };
-                
-                return (
-                  <button
-                    key={i}
-                    onClick={handleHostAnswer}
-                    disabled={showAnswer || (isHostPlayer && hostHasAnswered) || !isHostPlayer}
-                    className={clsx(
-                      "p-6 rounded-2xl text-xl font-medium flex items-center justify-between transition-all text-left border-2",
-                      showAnswer 
-                        ? isCorrect 
-                          ? "bg-emerald-500/20 border-emerald-500 text-emerald-100" 
-                          : isHostSelected
-                            ? "bg-red-500/20 border-red-500 text-red-100"
-                            : "bg-zinc-900 border-zinc-800 text-zinc-600 opacity-50"
-                        : isHostPlayer
-                          ? hostHasAnswered
-                            ? isHostSelected
-                              ? "bg-indigo-500/20 border-indigo-500 text-indigo-100"
-                              : "bg-zinc-900 border-zinc-800 text-zinc-600 opacity-50"
-                            : "bg-zinc-800 border-white/10 hover:bg-zinc-700 hover:border-white/30 cursor-pointer"
-                          : "bg-zinc-800 border-white/10 cursor-default"
-                    )}
-                  >
-                    <span>{opt}</span>
-                    {showAnswer && isCorrect && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
-                    {showAnswer && !isCorrect && isHostSelected && <XCircle className="w-6 h-6 text-red-400" />}
-                  </button>
-                );
-              })}
+                }}
+                isReviewMode={showAnswer}
+                isCorrect={false}
+                showFeedback={false}
+              />
             </div>
 
             <div className="w-full flex items-center justify-between">
@@ -529,6 +688,65 @@ export function HostView({ onBack }: HostViewProps) {
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {gameState === 'QUICK_EXAM' && (
+          <div className="w-full max-w-4xl flex flex-col items-center">
+            <div className="text-center mb-12">
+              <h2 className="text-5xl font-bold mb-4">Quick Exam in Progress</h2>
+              <p className="text-xl text-zinc-400">Players are answering at their own pace</p>
+            </div>
+
+            <div className="bg-zinc-900 border border-white/10 rounded-[2rem] p-8 w-full shadow-2xl mb-8">
+              <div className="flex items-center justify-between mb-8">
+                <div className="text-2xl font-medium">Time Remaining</div>
+                <div className={clsx(
+                  "text-4xl font-mono font-bold flex items-center gap-3",
+                  timeLeft <= 30 ? "text-red-400 animate-pulse" : "text-white"
+                )}>
+                  <Timer className="w-8 h-8 opacity-50" />
+                  {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between text-sm font-medium text-zinc-400 mb-2 px-2">
+                  <span>Player</span>
+                  <span>Status</span>
+                </div>
+                {players.filter(p => p.id !== 'host').map(p => (
+                  <div key={p.id} className="bg-zinc-800/50 border border-white/5 rounded-xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-300 font-bold">
+                        {p.name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-medium text-lg">{p.name}</span>
+                    </div>
+                    <div>
+                      {p.hasAnswered ? (
+                        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-medium">
+                          <CheckCircle2 className="w-4 h-4" />
+                          Finished
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-sm font-medium">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          In Progress
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={handleQuickExamEnd}
+              className="bg-red-600 hover:bg-red-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-colors"
+            >
+              End Exam Early
+            </button>
           </div>
         )}
 
