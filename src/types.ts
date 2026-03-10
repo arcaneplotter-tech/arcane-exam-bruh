@@ -3,6 +3,12 @@ export type ExamType = 'NORMAL' | 'QUICK';
 export type GameSettings = {
   timePerQuestion: number;
   examType: ExamType;
+  shuffleQuestions: boolean;
+  shuffleOptions: boolean;
+  showCorrectAnswer: boolean;
+  canSkipQuestions: boolean;
+  pointMultiplier: number;
+  penaltyPoints: number;
 };
 
 export type Question = {
@@ -11,6 +17,7 @@ export type Question = {
   options: string[];
   correctAnswer: string;
   timeLimit: number;
+  explanation?: string;
 };
 
 export type Player = {
@@ -32,5 +39,5 @@ export type MessageType =
   | { type: 'STATE_UPDATE'; state: GameState; data?: any }
   | { type: 'SUBMIT_ANSWER'; answer: string }
   | { type: 'SUBMIT_EXAM'; answers: Record<string, string>; timeTaken: number }
-  | { type: 'ANSWER_RESULT'; correct: boolean; score: number; correctAnswer: string }
+  | { type: 'ANSWER_RESULT'; correct: boolean; score: number; correctAnswer: string; explanation?: string }
   | { type: 'PLAYER_LIST'; players: { id: string; name: string; score: number; timeTaken?: number }[] };

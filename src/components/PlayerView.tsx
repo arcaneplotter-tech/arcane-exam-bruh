@@ -20,9 +20,10 @@ export function PlayerView({ onBack }: PlayerViewProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [answerResult, setAnswerResult] = useState<{ correct: boolean; score: number; correctAnswer: string } | null>(null);
+  const [answerResult, setAnswerResult] = useState<{ correct: boolean; score: number; correctAnswer: string; explanation?: string } | null>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [myScore, setMyScore] = useState(0);
+  const [settings, setSettings] = useState<any>(null);
 
   // QUICK mode state
   const [quickQuestions, setQuickQuestions] = useState<any[]>([]);
@@ -80,10 +81,13 @@ export function PlayerView({ onBack }: PlayerViewProps) {
   const handleHostMessage = (data: MessageType) => {
     if (data.type === 'JOIN_SUCCESS') {
       setGameState(data.gameState);
+      if (data.settings) setSettings(data.settings);
     }
     
     if (data.type === 'STATE_UPDATE') {
       setGameState(data.state);
+      if (data.data?.settings) setSettings(data.data.settings);
+      
       if (data.state === 'QUESTION') {
         setCurrentQuestion(data.data.question);
         setCurrentQuestionIndex(data.data.questionIndex || 0);
@@ -130,7 +134,8 @@ export function PlayerView({ onBack }: PlayerViewProps) {
       setAnswerResult({
         correct: data.correct,
         score: data.score,
-        correctAnswer: data.correctAnswer
+        correctAnswer: data.correctAnswer,
+        explanation: data.explanation
       });
       setMyScore(prev => prev + data.score);
     }
@@ -325,13 +330,15 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                 </div>
 
                 <div className="flex items-center justify-between mt-auto pt-6 border-t border-white/10">
-                  <button
-                    onClick={() => setQuickCurrentIndex(prev => Math.max(0, prev - 1))}
-                    disabled={quickCurrentIndex === 0}
-                    className="px-6 py-3 rounded-xl font-medium bg-zinc-800 text-white disabled:opacity-50 hover:bg-zinc-700 transition-colors"
-                  >
-                    Previous
-                  </button>
+                  {settings?.canSkipQuestions && (
+                    <button
+                      onClick={() => setQuickCurrentIndex(prev => Math.max(0, prev - 1))}
+                      disabled={quickCurrentIndex === 0}
+                      className="px-6 py-3 rounded-xl font-medium bg-zinc-800 text-white disabled:opacity-50 hover:bg-zinc-700 transition-colors"
+                    >
+                      Previous
+                    </button>
+                  )}
                   
                   {!quickSubmitted ? (
                     <button
@@ -346,7 +353,7 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                         }
                       }}
                       className={clsx(
-                        "px-8 py-3 rounded-xl font-bold transition-colors",
+                        "px-8 py-3 rounded-xl font-bold transition-colors ml-auto",
                         quickCurrentIndex === quickQuestions.length - 1
                           ? "bg-emerald-600 hover:bg-emerald-500 text-white"
                           : "bg-indigo-600 hover:bg-indigo-500 text-white"
@@ -355,7 +362,7 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                       {quickCurrentIndex === quickQuestions.length - 1 ? 'Submit Exam' : 'Next'}
                     </button>
                   ) : (
-                    <div className="text-emerald-400 font-medium flex items-center gap-2">
+                    <div className="text-emerald-400 font-medium flex items-center gap-2 ml-auto">
                       <CheckCircle2 className="w-5 h-5" />
                       Submitted! Waiting for others...
                     </div>
@@ -363,21 +370,23 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                 </div>
                 
                 {/* Question Navigator */}
-                <div className="mt-8 flex flex-wrap gap-2 justify-center">
-                  {quickQuestions.map((q, i) => (
-                    <button
-                      key={q.id}
-                      onClick={() => setQuickCurrentIndex(i)}
-                      className={clsx(
-                        "w-10 h-10 rounded-lg font-medium text-sm flex items-center justify-center transition-colors border",
-                        quickCurrentIndex === i ? "border-indigo-500 ring-2 ring-indigo-500/50" : "border-transparent",
-                        quickAnswers[q.id] ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                      )}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                </div>
+                {settings?.canSkipQuestions && (
+                  <div className="mt-8 flex flex-wrap gap-2 justify-center">
+                    {quickQuestions.map((q, i) => (
+                      <button
+                        key={q.id}
+                        onClick={() => setQuickCurrentIndex(i)}
+                        className={clsx(
+                          "w-10 h-10 rounded-lg font-medium text-sm flex items-center justify-center transition-colors border",
+                          quickCurrentIndex === i ? "border-indigo-500 ring-2 ring-indigo-500/50" : "border-transparent",
+                          quickAnswers[q.id] ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                        )}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -445,28 +454,44 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                 animate={{ scale: 1, opacity: 1 }}
                 className={clsx(
                   "w-full max-w-md rounded-3xl p-8 text-center",
-                  answerResult.correct ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
+                  (settings?.showCorrectAnswer || !answerResult.correct) ? (answerResult.correct ? "bg-emerald-500 text-white" : "bg-red-500 text-white") : "bg-indigo-600 text-white"
                 )}
               >
-                {answerResult.correct ? (
-                  <CheckCircle2 className="w-24 h-24 mx-auto mb-6" />
+                {settings?.showCorrectAnswer ? (
+                  <>
+                    {answerResult.correct ? (
+                      <CheckCircle2 className="w-24 h-24 mx-auto mb-6" />
+                    ) : (
+                      <XCircle className="w-24 h-24 mx-auto mb-6" />
+                    )}
+                    
+                    <h2 className="text-4xl font-bold mb-2">
+                      {answerResult.correct ? "Correct!" : "Incorrect"}
+                    </h2>
+                    
+                    <div className="text-xl opacity-90 mb-8">
+                      {answerResult.correct ? `+${answerResult.score} points` : "0 points"}
+                    </div>
+                    
+                    {!answerResult.correct && (
+                      <div className="bg-black/20 rounded-xl p-4 mb-4">
+                        <div className="text-sm uppercase tracking-wider opacity-80 mb-1">Correct Answer</div>
+                        <div className="font-bold text-lg">{answerResult.correctAnswer}</div>
+                      </div>
+                    )}
+
+                    {answerResult.explanation && (
+                      <div className="bg-white/10 rounded-xl p-4 text-sm italic">
+                        {answerResult.explanation}
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <XCircle className="w-24 h-24 mx-auto mb-6" />
-                )}
-                
-                <h2 className="text-4xl font-bold mb-2">
-                  {answerResult.correct ? "Correct!" : "Incorrect"}
-                </h2>
-                
-                <div className="text-xl opacity-90 mb-8">
-                  {answerResult.correct ? `+${answerResult.score} points` : "0 points"}
-                </div>
-                
-                {!answerResult.correct && (
-                  <div className="bg-black/20 rounded-xl p-4">
-                    <div className="text-sm uppercase tracking-wider opacity-80 mb-1">Correct Answer</div>
-                    <div className="font-bold text-lg">{answerResult.correctAnswer}</div>
-                  </div>
+                  <>
+                    <CheckCircle2 className="w-24 h-24 mx-auto mb-6 opacity-50" />
+                    <h2 className="text-4xl font-bold mb-4">Answer Received</h2>
+                    <p className="text-xl opacity-80">Waiting for the host to reveal results...</p>
+                  </>
                 )}
               </motion.div>
             )}
@@ -594,6 +619,15 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                         );
                       })}
                     </div>
+                    
+                    {q.explanation && (
+                      <div className="mt-6 pl-0 md:pl-18">
+                        <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-6">
+                          <h4 className="text-indigo-400 font-bold uppercase tracking-widest text-xs mb-2">Explanation</h4>
+                          <p className="text-zinc-300 italic leading-relaxed">{q.explanation}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
