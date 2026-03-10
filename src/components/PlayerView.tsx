@@ -3,7 +3,6 @@ import { Peer, DataConnection } from 'peerjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, CheckCircle2, XCircle, Loader2, Trophy, AlertCircle, Timer } from 'lucide-react';
 import { GameState, MessageType } from '../types';
-import { EnhancedQuestionCard, QuestionMap, Button } from './ExamUI';
 import { clsx } from 'clsx';
 
 interface PlayerViewProps {
@@ -288,27 +287,54 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                 </div>
 
                 <div className="flex-1 flex flex-col">
-                  <EnhancedQuestionCard
-                    question={quickQuestions[quickCurrentIndex]}
-                    selectedAnswer={quickAnswers[quickQuestions[quickCurrentIndex].id]}
-                    onSelectAnswer={handleQuickAnswer}
-                    isReviewMode={quickSubmitted}
-                    isCorrect={false} // We don't know if it's correct until the end
-                    showFeedback={false}
-                  />
+                  <div className="bg-zinc-900 border border-white/10 rounded-[2rem] p-8 md:p-12 shadow-2xl mb-8">
+                    <h2 className="text-3xl md:text-4xl font-medium leading-tight">
+                      {quickQuestions[quickCurrentIndex].text}
+                    </h2>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    {quickQuestions[quickCurrentIndex].options.map((opt: string, i: number) => {
+                      const isSelected = quickAnswers[quickQuestions[quickCurrentIndex].id] === opt;
+                      const labels = ['A', 'B', 'C', 'D'];
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => handleQuickAnswer(opt)}
+                          disabled={quickSubmitted}
+                          className={clsx(
+                            "p-6 md:p-8 rounded-3xl text-xl font-medium transition-all text-left border-2 flex items-center gap-6 group",
+                            isSelected 
+                              ? "bg-indigo-600 border-indigo-500 text-white shadow-[0_0_30px_rgba(79,70,229,0.3)]" 
+                              : "bg-zinc-900/50 border-white/10 hover:bg-zinc-800 hover:border-white/20 text-zinc-300",
+                            quickSubmitted && !isSelected && "opacity-50"
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold transition-colors flex-shrink-0",
+                            isSelected ? "bg-white/20 text-white" : "bg-white/5 text-zinc-500 group-hover:bg-white/10 group-hover:text-zinc-300"
+                          )}>
+                            {labels[i]}
+                          </div>
+                          <span className="flex-1">{opt}</span>
+                          {isSelected && <CheckCircle2 className="w-6 h-6 text-white flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between mt-auto pt-6 border-t border-white/10">
-                  <Button
+                  <button
                     onClick={() => setQuickCurrentIndex(prev => Math.max(0, prev - 1))}
                     disabled={quickCurrentIndex === 0}
-                    variant="ghost"
+                    className="px-6 py-3 rounded-xl font-medium bg-zinc-800 text-white disabled:opacity-50 hover:bg-zinc-700 transition-colors"
                   >
                     Previous
-                  </Button>
+                  </button>
                   
                   {!quickSubmitted ? (
-                    <Button
+                    <button
                       onClick={() => {
                         if (quickCurrentIndex === quickQuestions.length - 1) {
                           if (Object.keys(quickAnswers).length < quickQuestions.length) {
@@ -319,10 +345,15 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                           setQuickCurrentIndex(prev => Math.min(quickQuestions.length - 1, prev + 1));
                         }
                       }}
-                      variant={quickCurrentIndex === quickQuestions.length - 1 ? "success" : "primary"}
+                      className={clsx(
+                        "px-8 py-3 rounded-xl font-bold transition-colors",
+                        quickCurrentIndex === quickQuestions.length - 1
+                          ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                          : "bg-indigo-600 hover:bg-indigo-500 text-white"
+                      )}
                     >
                       {quickCurrentIndex === quickQuestions.length - 1 ? 'Submit Exam' : 'Next'}
-                    </Button>
+                    </button>
                   ) : (
                     <div className="text-emerald-400 font-medium flex items-center gap-2">
                       <CheckCircle2 className="w-5 h-5" />
@@ -332,15 +363,20 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                 </div>
                 
                 {/* Question Navigator */}
-                <div className="mt-8">
-                  <QuestionMap
-                    totalQuestions={quickQuestions.length}
-                    currentIndex={quickCurrentIndex}
-                    answers={Object.fromEntries(quickQuestions.map((q, i) => [i, quickAnswers[q.id]]).filter(([_, v]) => v !== undefined))}
-                    flagged={new Set()}
-                    onNavigate={setQuickCurrentIndex}
-                    isReviewMode={quickSubmitted}
-                  />
+                <div className="mt-8 flex flex-wrap gap-2 justify-center">
+                  {quickQuestions.map((q, i) => (
+                    <button
+                      key={q.id}
+                      onClick={() => setQuickCurrentIndex(i)}
+                      className={clsx(
+                        "w-10 h-10 rounded-lg font-medium text-sm flex items-center justify-center transition-colors border",
+                        quickCurrentIndex === i ? "border-indigo-500 ring-2 ring-indigo-500/50" : "border-transparent",
+                        quickAnswers[q.id] ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                      )}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
@@ -351,17 +387,47 @@ export function PlayerView({ onBack }: PlayerViewProps) {
                   <span className="inline-block px-4 py-1.5 rounded-full bg-white/10 text-white/70 font-medium text-sm mb-6 tracking-widest uppercase">
                     Question {currentQuestionIndex + 1} of {totalQuestions}
                   </span>
+                  <h2 className="text-3xl md:text-5xl font-bold mb-4 leading-tight">{currentQuestion.text}</h2>
                 </div>
                 
-                <div className="flex-1 flex flex-col">
-                  <EnhancedQuestionCard
-                    question={currentQuestion}
-                    selectedAnswer={selectedAnswer}
-                    onSelectAnswer={submitAnswer}
-                    isReviewMode={false}
-                    isCorrect={false}
-                    showFeedback={false}
-                  />
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                  {currentQuestion.options.map((opt: string, i: number) => {
+                    const colors = [
+                      'bg-rose-500 hover:bg-rose-400 shadow-[0_6px_0_rgb(159,18,57)]',
+                      'bg-blue-500 hover:bg-blue-400 shadow-[0_6px_0_rgb(30,58,138)]',
+                      'bg-amber-500 hover:bg-amber-400 shadow-[0_6px_0_rgb(146,64,14)]',
+                      'bg-emerald-500 hover:bg-emerald-400 shadow-[0_6px_0_rgb(6,78,59)]'
+                    ];
+                    const selectedColors = [
+                      'bg-rose-600 shadow-[0_0px_0_rgb(159,18,57)] translate-y-[6px]',
+                      'bg-blue-600 shadow-[0_0px_0_rgb(30,58,138)] translate-y-[6px]',
+                      'bg-amber-600 shadow-[0_0px_0_rgb(146,64,14)] translate-y-[6px]',
+                      'bg-emerald-600 shadow-[0_0px_0_rgb(6,78,59)] translate-y-[6px]'
+                    ];
+                    const labels = ['A', 'B', 'C', 'D'];
+                    
+                    const isSelected = selectedAnswer === opt;
+                    const isDisabled = !!selectedAnswer;
+
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => submitAnswer(opt)}
+                        disabled={isDisabled}
+                        className={clsx(
+                          "relative p-6 md:p-8 rounded-3xl text-xl md:text-2xl font-bold transition-all flex items-center gap-6 min-h-[120px] md:min-h-[160px] group",
+                          isSelected ? selectedColors[i % 4] : colors[i % 4],
+                          isDisabled && !isSelected ? "opacity-40 grayscale-[0.5]" : "",
+                          !isDisabled && "active:translate-y-[6px] active:shadow-none"
+                        )}
+                      >
+                        <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-white/20 flex items-center justify-center text-2xl md:text-3xl flex-shrink-0">
+                          {labels[i]}
+                        </div>
+                        <span className="text-left leading-tight drop-shadow-md">{opt}</span>
+                      </button>
+                    );
+                  })}
                 </div>
                 
                 {selectedAnswer && (

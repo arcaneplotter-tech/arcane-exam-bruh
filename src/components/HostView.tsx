@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, Users, Play, ArrowLeft, Trophy, CheckCircle2, XCircle, Loader2, Copy, Check, Timer } from 'lucide-react';
 import Papa from 'papaparse';
 import { Question, Player, GameState, MessageType, GameSettings } from '../types';
-import { EnhancedQuestionCard } from './ExamUI';
 import { clsx } from 'clsx';
 
 interface HostViewProps {
@@ -203,66 +202,42 @@ export function HostView({ onBack }: HostViewProps) {
     }
   };
 
-  const parseCSV = (text: string): Question[] => {
-    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-    const questions: Question[] = [];
-    let startIndex = 0;
-    if (lines.length > 0) {
-        const firstLineLower = lines[0].toLowerCase();
-        if (firstLineLower.startsWith('id') || firstLineLower.startsWith('question')) startIndex = 1;
-    }
-    for (let i = startIndex; i < lines.length; i++) {
-        const cols = lines[i].split(';').map(c => c.trim());
-        if (cols.length < 2) continue;
-        const id = cols[0];
-        const text = cols[1];
-        const optionsRaw = cols[2] || '';
-        const correctAnswer = cols[3] || '';
-        const imageUrl = cols[4] || undefined;
-        const explanation = cols[5] || '';
-        const category = cols[6] || 'General';
-        const difficulty = cols[7] || 'Medium';
-        let options: string[] = [];
-        let isEssay = false;
-        if (optionsRaw.toUpperCase() === 'ESSAY' || !optionsRaw) {
-            isEssay = true;
-        } else {
-            options = optionsRaw.includes('|') ? optionsRaw.split('|').map(o => o.trim()) : optionsRaw.split(',').map(o => o.trim());
-        }
-        questions.push({ 
-            id, 
-            text, 
-            options, 
-            correctAnswer, 
-            imageUrl, 
-            explanation,
-            isEssay, 
-            category, 
-            difficulty,
-            timeLimit: 20
-        });
-    }
-    return questions;
-  };
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (ev.target?.result) {
-        const parsedQuestions = parseCSV(ev.target.result as string);
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const parsedQuestions: Question[] = results.data.map((row: any, index) => ({
+          id: `q-${index}`,
+          text: row.Question || row.question,
+          options: [row.Option1 || row.option1, row.Option2 || row.option2, row.Option3 || row.option3, row.Option4 || row.option4].filter(Boolean),
+          correctAnswer: row.CorrectAnswer || row.correctAnswer,
+          timeLimit: parseInt(row.TimeLimit || row.timeLimit || '20', 10)
+        }));
         setQuestions(parsedQuestions);
       }
-    };
-    reader.readAsText(file);
+    });
   };
 
   const handleTextLoad = () => {
     if (!csvText.trim()) return;
-    const parsedQuestions = parseCSV(csvText);
-    setQuestions(parsedQuestions);
+    Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const parsedQuestions: Question[] = results.data.map((row: any, index) => ({
+          id: `q-${index}`,
+          text: row.Question || row.question,
+          options: [row.Option1 || row.option1, row.Option2 || row.option2, row.Option3 || row.option3, row.Option4 || row.option4].filter(Boolean),
+          correctAnswer: row.CorrectAnswer || row.correctAnswer,
+          timeLimit: parseInt(row.TimeLimit || row.timeLimit || '20', 10)
+        }));
+        setQuestions(parsedQuestions);
+      }
+    });
   };
 
   const handleHostJoin = () => {
@@ -642,8 +617,8 @@ export function HostView({ onBack }: HostViewProps) {
               </div>
             </div>
 
-            <div className="w-full mb-12 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-2 bg-white/5 rounded-t-3xl z-10">
+            <div className="w-full bg-zinc-900 border border-white/10 rounded-[3rem] p-10 md:p-16 shadow-2xl mb-12 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-white/5">
                 <motion.div 
                   className="h-full bg-indigo-500"
                   initial={{ width: '100%' }}
@@ -651,12 +626,37 @@ export function HostView({ onBack }: HostViewProps) {
                   transition={{ duration: 1, ease: "linear" }}
                 />
               </div>
-              <EnhancedQuestionCard
-                question={questions[currentQuestionIndex]}
-                selectedAnswer={players.find(p => p.id === 'host')?.currentAnswer}
-                onSelectAnswer={(opt: string) => {
-                  const hostPlayer = players.find(p => p.id === 'host');
-                  if (!hostPlayer || hostPlayer.hasAnswered || showAnswer) return;
+              <h2 className="text-4xl md:text-6xl font-medium text-center leading-tight">
+                {questions[currentQuestionIndex].text}
+              </h2>
+            </div>
+
+            <div className="w-full grid md:grid-cols-2 gap-6 mb-12">
+              {questions[currentQuestionIndex].options.map((opt, i) => {
+                const isCorrect = showAnswer && opt === questions[currentQuestionIndex].correctAnswer;
+                const isWrong = showAnswer && !isCorrect;
+                
+                const hostPlayer = players.find(p => p.id === 'host');
+                const isHostPlayer = !!hostPlayer;
+                const hostHasAnswered = hostPlayer?.hasAnswered;
+                const isHostSelected = hostPlayer?.currentAnswer === opt;
+                
+                const labels = ['A', 'B', 'C', 'D'];
+                const colors = [
+                  'bg-rose-500 hover:bg-rose-400 shadow-[0_8px_0_rgb(159,18,57)]',
+                  'bg-blue-500 hover:bg-blue-400 shadow-[0_8px_0_rgb(30,58,138)]',
+                  'bg-amber-500 hover:bg-amber-400 shadow-[0_8px_0_rgb(146,64,14)]',
+                  'bg-emerald-500 hover:bg-emerald-400 shadow-[0_8px_0_rgb(6,78,59)]'
+                ];
+                const selectedColors = [
+                  'bg-rose-600 shadow-[0_0px_0_rgb(159,18,57)] translate-y-[8px]',
+                  'bg-blue-600 shadow-[0_0px_0_rgb(30,58,138)] translate-y-[8px]',
+                  'bg-amber-600 shadow-[0_0px_0_rgb(146,64,14)] translate-y-[8px]',
+                  'bg-emerald-600 shadow-[0_0px_0_rgb(6,78,59)] translate-y-[8px]'
+                ];
+
+                const handleHostAnswer = () => {
+                  if (!isHostPlayer || hostHasAnswered || showAnswer) return;
                   
                   const q = questions[currentQuestionIndex];
                   const isCorrect = opt === q.correctAnswer;
@@ -668,11 +668,50 @@ export function HostView({ onBack }: HostViewProps) {
                     }
                     return p;
                   }));
-                }}
-                isReviewMode={showAnswer}
-                isCorrect={false}
-                showFeedback={false}
-              />
+                };
+                
+                let btnClass = "relative p-8 rounded-3xl text-2xl font-bold transition-all flex items-center gap-6 min-h-[140px] group text-white ";
+                
+                if (showAnswer) {
+                  if (isCorrect) {
+                    btnClass += "bg-emerald-500 shadow-[0_0px_0_rgb(6,78,59)] translate-y-[8px] ring-4 ring-emerald-400 ring-offset-4 ring-offset-zinc-950";
+                  } else if (isHostSelected) {
+                    btnClass += "bg-red-600 shadow-[0_0px_0_rgb(153,27,27)] translate-y-[8px] opacity-50";
+                  } else {
+                    btnClass += "bg-zinc-800 shadow-[0_0px_0_rgb(39,39,42)] translate-y-[8px] opacity-30 grayscale";
+                  }
+                } else {
+                  if (isHostPlayer) {
+                    if (hostHasAnswered) {
+                      if (isHostSelected) {
+                        btnClass += selectedColors[i % 4];
+                      } else {
+                        btnClass += colors[i % 4] + " opacity-50 grayscale-[0.5]";
+                      }
+                    } else {
+                      btnClass += colors[i % 4] + " active:translate-y-[8px] active:shadow-none cursor-pointer";
+                    }
+                  } else {
+                    btnClass += colors[i % 4] + " cursor-default";
+                  }
+                }
+                
+                return (
+                  <button
+                    key={i}
+                    onClick={handleHostAnswer}
+                    disabled={showAnswer || (isHostPlayer && hostHasAnswered) || !isHostPlayer}
+                    className={btnClass}
+                  >
+                    <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center text-3xl flex-shrink-0">
+                      {labels[i]}
+                    </div>
+                    <span className="text-left leading-tight drop-shadow-md flex-1">{opt}</span>
+                    {showAnswer && isCorrect && <CheckCircle2 className="w-10 h-10 text-white drop-shadow-md flex-shrink-0" />}
+                    {showAnswer && !isCorrect && isHostSelected && <XCircle className="w-10 h-10 text-white/50 flex-shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="w-full flex items-center justify-between">

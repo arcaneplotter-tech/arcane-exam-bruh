@@ -11,11 +11,6 @@ export type Question = {
   options: string[];
   correctAnswer: string;
   timeLimit: number;
-  imageUrl?: string;
-  explanation?: string;
-  isEssay?: boolean;
-  category?: string;
-  difficulty?: string;
 };
 
 export type Player = {
